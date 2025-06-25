@@ -1,0 +1,407 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Data model definitions for the PMC application
+    
+.DESCRIPTION
+    This module defines all core data classes and enums used throughout the application.
+    It is self-contained with no dependencies on other modules.
+    
+.NOTES
+    AI: This module replaces the previous implicit data structures with strongly-typed classes
+    AI: Using PowerShell native enum syntax for better compatibility
+#>
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+#region Enums - Define first for class dependencies
+
+# AI: Using PowerShell native enum syntax instead of Add-Type for better reliability
+enum TaskStatus {
+    Pending
+    InProgress
+    Completed
+    Cancelled
+}
+
+enum TaskPriority {
+    Low
+    Medium
+    High
+}
+
+enum BillingType {
+    Billable
+    NonBillable
+}
+
+#endregion
+
+#region Classes
+
+class PmcTask {
+    # Core properties
+    [string]$Id
+    [string]$Title
+    [string]$Description
+    [TaskStatus]$Status
+    [TaskPriority]$Priority
+    [string]$ProjectKey
+    [string]$Category  # AI: Maintained for backward compatibility
+    [datetime]$CreatedAt
+    [datetime]$UpdatedAt
+    
+    # Optional properties
+    [Nullable[datetime]]$DueDate
+    [string[]]$Tags
+    [int]$Progress  # AI: Progress percentage (0-100)
+    
+    # Legacy support
+    [bool]$Completed  # AI: Computed property for backward compatibility
+    
+    # Default constructor
+    PmcTask() {
+        $this.Id = [Guid]::NewGuid().ToString()
+        $this.Title = ""
+        $this.Description = ""
+        $this.Status = [TaskStatus]::Pending
+        $this.Priority = [TaskPriority]::Medium
+        $this.ProjectKey = "General"
+        $this.Category = "General"
+        $this.CreatedAt = [datetime]::Now
+        $this.UpdatedAt = [datetime]::Now
+        $this.DueDate = $null
+        $this.Tags = @()
+        $this.Progress = 0
+        $this.Completed = $false
+    }
+    
+    # Constructor with title
+    PmcTask([string]$title) {
+        $this.Id = [Guid]::NewGuid().ToString()
+        $this.Title = $title
+        $this.Description = ""
+        $this.Status = [TaskStatus]::Pending
+        $this.Priority = [TaskPriority]::Medium
+        $this.ProjectKey = "General"
+        $this.Category = "General"
+        $this.CreatedAt = [datetime]::Now
+        $this.UpdatedAt = [datetime]::Now
+        $this.DueDate = $null
+        $this.Tags = @()
+        $this.Progress = 0
+        $this.Completed = $false
+    }
+    
+    # Full constructor
+    PmcTask([string]$title, [string]$description, [TaskPriority]$priority, [string]$projectKey) {
+        $this.Id = [Guid]::NewGuid().ToString()
+        $this.Title = $title
+        $this.Description = $description
+        $this.Status = [TaskStatus]::Pending
+        $this.Priority = $priority
+        $this.ProjectKey = $projectKey
+        $this.Category = $projectKey  # AI: Set for backward compatibility
+        $this.CreatedAt = [datetime]::Now
+        $this.UpdatedAt = [datetime]::Now
+        $this.DueDate = $null
+        $this.Tags = @()
+        $this.Progress = 0
+        $this.Completed = $false
+    }
+    
+    # Methods
+    [void] Complete() {
+        $this.Status = [TaskStatus]::Completed
+        $this.Completed = $true
+        $this.Progress = 100
+        $this.UpdatedAt = [datetime]::Now
+    }
+    
+    [void] UpdateProgress([int]$progress) {
+        if ($progress -lt 0 -or $progress -gt 100) {
+            throw "Progress must be between 0 and 100"
+        }
+        
+        $this.Progress = $progress
+        
+        # AI: Auto-update status based on progress
+        if ($progress -eq 0) {
+            $this.Status = [TaskStatus]::Pending
+            $this.Completed = $false
+        }
+        elseif ($progress -gt 0 -and $progress -lt 100) {
+            $this.Status = [TaskStatus]::InProgress
+            $this.Completed = $false
+        }
+        elseif ($progress -eq 100) {
+            $this.Status = [TaskStatus]::Completed
+            $this.Completed = $true
+        }
+        
+        $this.UpdatedAt = [datetime]::Now
+    }
+    
+    [string] GetDueDateString() {
+        if ($null -eq $this.DueDate) {
+            return "N/A"
+        }
+        return $this.DueDate.ToString("yyyy-MM-dd")
+    }
+    
+    # AI: Helper method for legacy data format conversion
+    [hashtable] ToLegacyFormat() {
+        return @{
+            id = $this.Id
+            title = $this.Title
+            description = $this.Description
+            completed = $this.Completed
+            priority = $this.Priority.ToString().ToLower()
+            project = $this.ProjectKey
+            due_date = if ($null -ne $this.DueDate) { $this.GetDueDateString() } else { $null }
+            created_at = $this.CreatedAt.ToString("o")
+            updated_at = $this.UpdatedAt.ToString("o")
+        }
+    }
+    
+    # AI: Static method to create from legacy format
+    static [PmcTask] FromLegacyFormat([hashtable]$legacyData) {
+        $task = [PmcTask]::new()
+        
+        if ($legacyData.id) { $task.Id = $legacyData.id }
+        if ($legacyData.title) { $task.Title = $legacyData.title }
+        if ($legacyData.description) { $task.Description = $legacyData.description }
+        
+        # Handle priority conversion
+        if ($legacyData.priority) {
+            switch ($legacyData.priority.ToLower()) {
+                "low" { $task.Priority = [TaskPriority]::Low }
+                "medium" { $task.Priority = [TaskPriority]::Medium }
+                "high" { $task.Priority = [TaskPriority]::High }
+                default { $task.Priority = [TaskPriority]::Medium }
+            }
+        }
+        
+        # Handle project/category
+        if ($legacyData.project) { 
+            $task.ProjectKey = $legacyData.project
+            $task.Category = $legacyData.project
+        }
+        elseif ($legacyData.Category) {
+            $task.ProjectKey = $legacyData.Category
+            $task.Category = $legacyData.Category
+        }
+        
+        # Handle dates
+        if ($legacyData.created_at) {
+            try {
+                $task.CreatedAt = [datetime]::Parse($legacyData.created_at)
+            }
+            catch {
+                $task.CreatedAt = [datetime]::Now
+            }
+        }
+        
+        if ($legacyData.updated_at) {
+            try {
+                $task.UpdatedAt = [datetime]::Parse($legacyData.updated_at)
+            }
+            catch {
+                $task.UpdatedAt = [datetime]::Now
+            }
+        }
+        
+        if ($legacyData.due_date -and $legacyData.due_date -ne "N/A") {
+            try {
+                $task.DueDate = [datetime]::Parse($legacyData.due_date)
+            }
+            catch {
+                $task.DueDate = $null
+            }
+        }
+        
+        # Handle completion status
+        if ($legacyData.completed -eq $true) {
+            $task.Status = [TaskStatus]::Completed
+            $task.Completed = $true
+            $task.Progress = 100
+        }
+        
+        return $task
+    }
+}
+
+class PmcProject {
+    # Core properties
+    [string]$Key
+    [string]$Name
+    [string]$Client
+    [BillingType]$BillingType
+    [double]$Rate
+    [double]$Budget
+    [bool]$Active
+    [datetime]$CreatedAt
+    [datetime]$UpdatedAt
+    
+    # Additional identifiers
+    [string]$Id1  # AI: External system ID 1
+    [string]$Id2  # AI: External system ID 2
+    
+    # Computed properties
+    [double]$SpentBudget
+    [double]$RemainingBudget
+    
+    # Default constructor
+    PmcProject() {
+        $this.Key = ""
+        $this.Name = ""
+        $this.Client = ""
+        $this.BillingType = [BillingType]::NonBillable
+        $this.Rate = 0.0
+        $this.Budget = 0.0
+        $this.Active = $true
+        $this.CreatedAt = [datetime]::Now
+        $this.UpdatedAt = [datetime]::Now
+        $this.Id1 = ""
+        $this.Id2 = ""
+        $this.SpentBudget = 0.0
+        $this.RemainingBudget = 0.0
+    }
+    
+    # Constructor with key and name
+    PmcProject([string]$key, [string]$name) {
+        $this.Key = $key
+        $this.Name = $name
+        $this.Client = ""
+        $this.BillingType = [BillingType]::NonBillable
+        $this.Rate = 0.0
+        $this.Budget = 0.0
+        $this.Active = $true
+        $this.CreatedAt = [datetime]::Now
+        $this.UpdatedAt = [datetime]::Now
+        $this.Id1 = ""
+        $this.Id2 = ""
+        $this.SpentBudget = 0.0
+        $this.RemainingBudget = 0.0
+    }
+    
+    # Full constructor
+    PmcProject([string]$key, [string]$name, [string]$client, [BillingType]$billingType, [double]$rate) {
+        $this.Key = $key
+        $this.Name = $name
+        $this.Client = $client
+        $this.BillingType = $billingType
+        $this.Rate = $rate
+        $this.Budget = 0.0
+        $this.Active = $true
+        $this.CreatedAt = [datetime]::Now
+        $this.UpdatedAt = [datetime]::Now
+        $this.Id1 = ""
+        $this.Id2 = ""
+        $this.SpentBudget = 0.0
+        $this.RemainingBudget = 0.0
+    }
+    
+    # Methods
+    [void] UpdateBudgetSpent([double]$amount) {
+        if ($amount -lt 0) {
+            throw "Spent amount cannot be negative"
+        }
+        
+        $this.SpentBudget = $amount
+        $this.RemainingBudget = $this.Budget - $amount
+        $this.UpdatedAt = [datetime]::Now
+    }
+    
+    [void] Deactivate() {
+        $this.Active = $false
+        $this.UpdatedAt = [datetime]::Now
+    }
+    
+    [void] Activate() {
+        $this.Active = $true
+        $this.UpdatedAt = [datetime]::Now
+    }
+    
+    [bool] IsBillable() {
+        return $this.BillingType -eq [BillingType]::Billable
+    }
+    
+    [bool] IsOverBudget() {
+        return ($this.Budget -gt 0) -and ($this.SpentBudget -gt $this.Budget)
+    }
+    
+    # AI: Helper method for legacy data format conversion
+    [hashtable] ToLegacyFormat() {
+        return @{
+            Key = $this.Key
+            Name = $this.Name
+            Client = $this.Client
+            BillingType = $this.BillingType.ToString()
+            Rate = $this.Rate
+            Budget = $this.Budget
+            Active = $this.Active
+            CreatedAt = $this.CreatedAt.ToString("o")
+            Id1 = $this.Id1
+            Id2 = $this.Id2
+        }
+    }
+    
+    # AI: Static method to create from legacy format
+    static [PmcProject] FromLegacyFormat([hashtable]$legacyData) {
+        $project = [PmcProject]::new()
+        
+        if ($legacyData.Key) { $project.Key = $legacyData.Key }
+        if ($legacyData.Name) { $project.Name = $legacyData.Name }
+        if ($legacyData.Client) { $project.Client = $legacyData.Client }
+        
+        # Handle billing type conversion
+        if ($legacyData.BillingType) {
+            switch ($legacyData.BillingType) {
+                "Billable" { $project.BillingType = [BillingType]::Billable }
+                "NonBillable" { $project.BillingType = [BillingType]::NonBillable }
+                default { $project.BillingType = [BillingType]::NonBillable }
+            }
+        }
+        
+        if ($null -ne $legacyData.Rate) { $project.Rate = [double]$legacyData.Rate }
+        if ($null -ne $legacyData.Budget) { $project.Budget = [double]$legacyData.Budget }
+        if ($null -ne $legacyData.Active) { $project.Active = [bool]$legacyData.Active }
+        
+        if ($legacyData.CreatedAt) {
+            try {
+                $project.CreatedAt = [datetime]::Parse($legacyData.CreatedAt)
+            }
+            catch {
+                $project.CreatedAt = [datetime]::Now
+            }
+        }
+        
+        if ($legacyData.Id1) { $project.Id1 = $legacyData.Id1 }
+        if ($legacyData.Id2) { $project.Id2 = $legacyData.Id2 }
+        
+        # Set UpdatedAt to CreatedAt if not migrating
+        $project.UpdatedAt = $project.CreatedAt
+        
+        return $project
+    }
+}
+
+#endregion
+
+# Export all public types
+# AI: In PowerShell 5.1, enums need to be explicitly made available in global scope
+$global:TaskStatus = [TaskStatus]
+$global:TaskPriority = [TaskPriority]
+$global:BillingType = [BillingType]
+$global:PmcTask = [PmcTask]
+$global:PmcProject = [PmcProject]
+
+Export-ModuleMember -Function * -Variable * -Alias @(
+    'TaskStatus',
+    'TaskPriority', 
+    'BillingType',
+    'PmcTask',
+    'PmcProject'
+)

@@ -320,6 +320,44 @@ class NavigationService {
         
         return $stats
     }
+    
+    # AI: Added GoTo method for compatibility with dashboard navigation expectations
+    [bool] GoTo([string]$path) {
+        return $this.GoTo($path, @{})
+    }
+    
+    [bool] GoTo([string]$path, [hashtable]$parameters) {
+        return Invoke-WithErrorHandling -Component "NavigationService" -Context "GoTo:$path" -ScriptBlock {
+            Write-Log -Level Info -Message "Navigating to path: $path" -Component "NavigationService"
+            
+            # Map paths to screen names
+            $screenMap = @{
+                "/tasks" = "TaskListScreen"
+                "/projects" = "ProjectListScreen"
+                "/reports" = "ReportsScreen"
+                "/settings" = "SettingsScreen"
+                "/dashboard" = "DashboardScreen"
+                "/" = "DashboardScreen"
+            }
+            
+            if (-not $screenMap.ContainsKey($path)) {
+                Write-Log -Level Warning -Message "Unknown navigation path: $path" -Component "NavigationService"
+                return $false
+            }
+            
+            $screenName = $screenMap[$path]
+            
+            try {
+                # Use PushScreen to navigate
+                $this.PushScreen($screenName, $parameters)
+                return $true
+            }
+            catch {
+                Write-Log -Level Error -Message "Failed to navigate to $screenName : $_" -Component "NavigationService"
+                return $false
+            }
+        }
+    }
 }
 
 # Export all classes

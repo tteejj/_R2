@@ -9,7 +9,9 @@ $ErrorActionPreference = "Stop"
 using module '..\components\ui-classes.psm1'
 
 # Import screen classes
-using module '..\screens\dashboard-screen-class.psm1'
+using module '..\screens\dashboard\dashboard-screen-class.psm1'
+using module '..\screens\task-list-screen-class.psm1'
+using module '..\screens\new-task-screen-class.psm1'
 
 # Import utilities for error handling
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force
@@ -35,12 +37,10 @@ class ScreenFactory {
         
         # Register all available screen types
         $this.ScreenTypes["DashboardScreen"] = [DashboardScreen]
+        $this.ScreenTypes["TaskListScreen"] = [TaskListScreen]
+        $this.ScreenTypes["NewTaskScreen"] = [NewTaskScreen]
         
         # AI: These screens will be implemented in subsequent phases
-        # For now, we'll add placeholders that will be replaced
-        
-        # $this.ScreenTypes["TaskListScreen"] = [TaskListScreen]
-        # $this.ScreenTypes["NewTaskScreen"] = [NewTaskScreen]
         # $this.ScreenTypes["EditTaskScreen"] = [EditTaskScreen]
         # $this.ScreenTypes["ProjectListScreen"] = [ProjectListScreen]
         # $this.ScreenTypes["SettingsScreen"] = [SettingsScreen]

@@ -8,8 +8,7 @@ using namespace System.Text
 using module .\ui-classes.psm1
 
 # Import utilities
-Import-Module "$PSScriptRoot\..\utilities\exceptions.psm1" -Force
-Import-Module "$PSScriptRoot\..\utilities\logging.psm1" -Force
+Import-Module "$PSScriptRoot\..\utilities\error-handling.psm1" -Force
 
 # BorderPanel - Panel with customizable border
 class BorderPanel : Panel {

@@ -5,6 +5,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Import error handling utilities
+Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force
+
 # Base UI Element - foundation for all visual components
 class UIElement {
     [string] $Name
@@ -144,7 +147,8 @@ class Screen : UIElement {
     [hashtable] $Services
     [System.Collections.Generic.Dictionary[string, object]] $State
     [System.Collections.Generic.List[Panel]] $Panels
-    hidden [System.Collections.Generic.List[string]] $EventSubscriptions
+    hidden [System.Collections.Generic.Dictionary[string, string]] $EventSubscriptions
+    [bool] $IsInitialized = $false
     
     Screen([string]$name, [hashtable]$services) : base($name) {
         if ($null -eq $services) {
@@ -162,7 +166,7 @@ class Screen : UIElement {
         $this.Services = $services
         $this.State = [System.Collections.Generic.Dictionary[string, object]]::new()
         $this.Panels = [System.Collections.Generic.List[Panel]]::new()
-        $this.EventSubscriptions = [System.Collections.Generic.List[string]]::new()
+        $this.EventSubscriptions = [System.Collections.Generic.Dictionary[string, string]]::new()
     }
     
     # Virtual method - override in derived classes
@@ -174,12 +178,13 @@ class Screen : UIElement {
     # Virtual method - override in derived classes
     [void] Cleanup() {
         # AI: Unsubscribe from all events to prevent memory leaks
-        foreach ($eventName in $this.EventSubscriptions) {
+        foreach ($kvp in $this.EventSubscriptions.GetEnumerator()) {
             try {
-                Unregister-Event -SourceIdentifier $eventName -ErrorAction SilentlyContinue
+                Unsubscribe-Event -EventName $kvp.Key -SubscriberId $kvp.Value
+                Write-Log -Level Debug -Message "Unsubscribed from event: $($kvp.Key)" -Component $this.Name
             }
             catch {
-                Write-Log -Level Warning -Message "Failed to unregister event: $eventName" -Component $this.Name
+                Write-Log -Level Warning -Message "Failed to unregister event: $($kvp.Key)" -Component $this.Name
             }
         }
         $this.EventSubscriptions.Clear()
@@ -204,8 +209,8 @@ class Screen : UIElement {
             throw [System.ArgumentNullException]::new("action", "Event action cannot be null")
         }
         
-        Register-EngineEvent -SourceIdentifier $eventName -Action $action
-        $this.EventSubscriptions.Add($eventName)
+        $subscriptionId = Subscribe-Event -EventName $eventName -Action $action
+        $this.EventSubscriptions[$eventName] = $subscriptionId
     }
     
     # AI: Helper to add panel with validation

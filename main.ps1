@@ -58,7 +58,7 @@ $script:ScreenModules = @(
 function Initialize-PMCModules {
     param([bool]$Silent = $false)
     
-    return Invoke-WithErrorHandling -Component "ModuleLoader" -Context "Initializing core and utility modules" -ScriptBlock {
+    return Invoke-WithErrorHandling -ScriptBlock {
         if (-not $Silent) {
             Write-Host "Verifying console environment..." -ForegroundColor Gray
         }
@@ -106,13 +106,13 @@ function Initialize-PMCModules {
         
         if (-not $Silent) { Write-Host "`rModules loaded successfully.                                    " -ForegroundColor Green }
         return $loadedModules
-    }
+    } -Component "ModuleLoader" -Context "Initializing core and utility modules"
 }
 
 function Initialize-PMCScreens {
     param([bool]$Silent = $false)
     
-    return Invoke-WithErrorHandling -Component "ScreenLoader" -Context "Initializing screen modules" -ScriptBlock {
+    return Invoke-WithErrorHandling -ScriptBlock {
         if (-not $Silent) { Write-Host "Loading screens..." -ForegroundColor Cyan }
         
         $loadedScreens = @()
@@ -130,7 +130,7 @@ function Initialize-PMCScreens {
         
         if (-not $Silent) { Write-Host "Screens loaded: $($loadedScreens.Count) of $($script:ScreenModules.Count)" -ForegroundColor Green }
         return $loadedScreens
-    }
+    } -Component "ScreenLoader" -Context "Initializing screen modules"
 }
 
 # AI: Removed the Initialize-PMCServices function. Service initialization is now handled
@@ -139,7 +139,7 @@ function Initialize-PMCScreens {
 function Start-PMCTerminal {
     param([bool]$Silent = $false)
     
-    Invoke-WithErrorHandling -Component "Application" -Context "Main startup sequence" -ScriptBlock {
+    Invoke-WithErrorHandling -ScriptBlock {
         Write-Log -Level Info -Message "PMC Terminal v5 'Helios' startup initiated."
         
         # --- 1. Load Core Modules ---
@@ -177,8 +177,9 @@ function Start-PMCTerminal {
         
         # --- 6. Initialize TUI Engine and Navigate ---
         if (-not $Silent) { Write-Host "`nStarting TUI..." -ForegroundColor Green }
+        Clear-Host
         
-        Initialize-TuiEngine -Width 80 -Height 24
+        Initialize-TuiEngine
         
         $startPath = if ($args -contains "-start" -and ($args.IndexOf("-start") + 1) -lt $args.Count) {
             $args[$args.IndexOf("-start") + 1]
@@ -197,7 +198,7 @@ function Start-PMCTerminal {
         Start-TuiLoop
         
         Write-Log -Level Info -Message "PMC Terminal exited gracefully."
-    }
+    } -Component "Application" -Context "Main startup sequence"
 }
 
 # ===================================================================

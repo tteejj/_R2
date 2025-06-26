@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # Import dependencies
-using module '.\models.psm1'
+using module '..\models.psm1'
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force
 Import-Module -Name "$PSScriptRoot\..\utilities\event-system.psm1" -Force
 

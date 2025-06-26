@@ -16,7 +16,7 @@ function Get-TaskManagementScreen {
         [hashtable]$Services
     )
     
-    Invoke-WithErrorHandling -Component "TaskScreen.Factory" -Context "Creating Task Management Screen" -ScriptBlock {
+    Invoke-WithErrorHandling -ScriptBlock {
         # Validate services parameter
         if (-not $Services) {
             throw "Services parameter is required for task management screen"
@@ -42,9 +42,9 @@ function Get-TaskManagementScreen {
             Init = {
                 param($self)
                 
-                Invoke-WithErrorHandling -Component "TaskScreen.Init" -Context "Initializing Task Screen" -ScriptBlock {
+                Invoke-WithErrorHandling -ScriptBlock {
                     $services = $self._services
-                    Write-Log -Level Info -Message "Task Screen Init: Starting initialization"
+                    Write-Log -Level Info -Message "Task Screen Init: Starting initialization" -Data @{ Component = "TaskScreen.Init" }
                     
                     # Create root panel
                     $rootPanel = New-TuiStackPanel -Props @{
@@ -206,7 +206,7 @@ function Get-TaskManagementScreen {
                     
                     $self.SaveTask = {
                         param($self)
-                        Invoke-WithErrorHandling -Component "TaskScreen.SaveTask" -Context "Saving task data" -ScriptBlock {
+                        Invoke-WithErrorHandling -ScriptBlock {
                             $title = $self.Components.titleInput.Text
                             if ([string]::IsNullOrWhiteSpace($title)) {
                                 Show-AlertDialog -Title "Validation Error" -Message "Title is required"
@@ -228,17 +228,17 @@ function Get-TaskManagementScreen {
                             }
                             
                             & $self.ShowListView -self $self
-                        }
+                        } -Component "TaskScreen.SaveTask" -Context "Saving task data"
                     }
                     
                     $self.RefreshTaskList = {
                         param($self)
-                        Invoke-WithErrorHandling -Component "TaskScreen.RefreshTaskList" -Context "Refreshing task list from global data" -ScriptBlock {
+                        Invoke-WithErrorHandling -ScriptBlock {
                             $tasks = if ($global:Data -and $global:Data.Tasks) { $global:Data.Tasks } else { @() }
                             $self.Components.taskTable.Data = $tasks
                             & $self.Components.taskTable.ProcessData -self $self.Components.taskTable
                             Request-TuiRefresh
-                        }
+                        } -Component "TaskScreen.RefreshTaskList" -Context "Refreshing task list from global data"
                     }
                     
                     $subscriptionId = Subscribe-Event -EventName "Tasks.Changed" -Handler { & $self.RefreshTaskList -self $self } -Source "TaskManagementScreen"
@@ -247,7 +247,7 @@ function Get-TaskManagementScreen {
                     & $self.RefreshTaskList -self $self
                     $self.Children = @($rootPanel)
                     Request-Focus -Component $taskTable
-                }
+                } -Component "TaskScreen.Init" -Context "Initializing Task Screen"
             }
             
             HandleInput = {
@@ -255,7 +255,7 @@ function Get-TaskManagementScreen {
                 
                 if (-not $key) { return $false }
                 
-                Invoke-WithErrorHandling -Component "TaskScreen.HandleInput" -Context "Handling user input" -ScriptBlock {
+                Invoke-WithErrorHandling -ScriptBlock {
                     if ($self._formMode) {
                         # AI: Form input handling
                         if ($key.Key -eq "Tab") {
@@ -310,25 +310,25 @@ function Get-TaskManagementScreen {
                     }
                     
                     return $false
-                }
+                } -Component "TaskScreen.HandleInput" -Context "Handling user input"
             }
             
             OnExit = {
                 param($self)
-                Invoke-WithErrorHandling -Component "TaskScreen.OnExit" -Context "Cleaning up Task Screen" -ScriptBlock {
+                Invoke-WithErrorHandling -ScriptBlock {
                     foreach ($subId in $self._subscriptions) {
                         if ($subId) { Unsubscribe-Event -HandlerId $subId }
                     }
                     $self._subscriptions = @()
                     $self.Components = @{}
                     $self._formFocusableComponents = @()
-                    Write-Log -Level Info -Message "Task Screen cleanup completed"
-                }
+                    Write-Log -Level Info -Message "Task Screen cleanup completed" -Data @{ Component = "TaskScreen.OnExit" }
+                } -Component "TaskScreen.OnExit" -Context "Cleaning up Task Screen"
             }
         }
         
         return $screen
-    }
+    } -Component "TaskScreen.Factory" -Context "Creating Task Management Screen"
 }
 
 # Alias for backward compatibility if needed

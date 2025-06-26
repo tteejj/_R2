@@ -577,8 +577,8 @@ function global:New-TuiDataTable {
                             }
                             if ($self.OnSelectionChange) {
                                 Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -Context "OnSelectionChange" -AdditionalData @{ Component = $self.Name; SelectedRows = $self.SelectedRows } -ScriptBlock {
-                                        & $self.OnSelectionChange -SelectedRows $self.SelectedRows
-                                    }
+                                    & $self.OnSelectionChange -SelectedRows $self.SelectedRows
+                                }
                             }
                             Request-TuiRefresh
                         } elseif ($self.AllowSort) {
@@ -595,7 +595,6 @@ function global:New-TuiDataTable {
                     }
                     ([ConsoleKey]::Enter) {
                         if ($self.OnRowSelect -and $self.ProcessedData.Count -gt 0) {
-                            if ($self.OnRowSelect -and $self.ProcessedData.Count -gt 0) {
                             Invoke-WithErrorHandling -Component "$($self.Name).OnRowSelect" -Context "OnRowSelect" -AdditionalData @{ Component = $self.Name; SelectedRow = $self.SelectedRow; MultiSelect = $self.MultiSelect } -ScriptBlock {
                                 $selectedData = if ($self.MultiSelect) {
                                     @($self.SelectedRows | ForEach-Object { $self.ProcessedData[$_] })
@@ -604,7 +603,6 @@ function global:New-TuiDataTable {
                                 }
                                 & $self.OnRowSelect -SelectedData $selectedData -SelectedIndex $self.SelectedRow
                             }
-                        }
                         }
                         return $true
                     }

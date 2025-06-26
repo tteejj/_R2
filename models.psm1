@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # Import utilities
-Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force
+Import-Module -Name "$PSScriptRoot\utilities\error-handling.psm1" -Force
 
 # TaskPriority Enum
 enum TaskPriority {

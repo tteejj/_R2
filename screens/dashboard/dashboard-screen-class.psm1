@@ -8,9 +8,8 @@ using module ..\..\components\ui-classes.psm1
 using module ..\..\components\panel-classes.psm1
 
 # Import utilities
-Import-Module "$PSScriptRoot\..\..\utilities\exceptions.psm1" -Force
-Import-Module "$PSScriptRoot\..\..\utilities\logging.psm1" -Force
-Import-Module "$PSScriptRoot\..\..\utilities\events.psm1" -Force
+Import-Module "$PSScriptRoot\..\..\utilities\error-handling.psm1" -Force
+Import-Module "$PSScriptRoot\..\..\utilities\event-system.psm1" -Force
 
 class DashboardScreen : Screen {
     # UI Components
@@ -80,14 +79,16 @@ class DashboardScreen : Screen {
     
     hidden [void] SubscribeToEvents() {
         # Subscribe to task changes
-        Register-EngineEvent -SourceIdentifier "Tasks.Changed" -Action {
+        $this.SubscribeToEvent("Tasks.Changed", {
+            param($eventArgs)
             $this.RefreshData()
-        }.GetNewClosure()
+        })
         
         # Subscribe to project changes
-        Register-EngineEvent -SourceIdentifier "Projects.Changed" -Action {
+        $this.SubscribeToEvent("Projects.Changed", {
+            param($eventArgs)
             $this.RefreshData()
-        }.GetNewClosure()
+        })
         
         Write-Log -Level Debug -Message "DashboardScreen subscribed to events"
     }
@@ -216,7 +217,11 @@ class DashboardScreen : Screen {
                             }
                         }
                         'P' { $this.Services.Navigation.PushScreen("ProjectListScreen") }
-                        'Q' { $this.Services.Navigation.RequestExit() }
+                        'T' { $this.Services.Navigation.PushScreen("TaskListScreen") }
+                        'Q' { 
+                            # Exit is handled by main loop
+                            # Could show exit confirmation here if needed
+                        }
                     }
                 }
             }
@@ -226,11 +231,7 @@ class DashboardScreen : Screen {
     [void] Cleanup() {
         Write-Log -Level Info -Message "Cleaning up DashboardScreen"
         
-        # Unregister event handlers
-        Unregister-Event -SourceIdentifier "Tasks.Changed" -ErrorAction SilentlyContinue
-        Unregister-Event -SourceIdentifier "Projects.Changed" -ErrorAction SilentlyContinue
-        
-        # Call base cleanup
+        # Call base cleanup (which handles event unsubscription)
         ([Screen]$this).Cleanup()
     }
 }

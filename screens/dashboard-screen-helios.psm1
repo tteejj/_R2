@@ -27,27 +27,26 @@ function Get-DashboardScreen {
         Init = {
             param($self, $services)
             
-            Invoke-WithErrorHandling -Component "Dashboard.Init" -Context "Initialize" -ScriptBlock {
-                # Defensive service validation
+            Invoke-WithErrorHandling -ScriptBlock {
+                # AI: Simplified and robust services validation
                 if (-not $services) {
-                    if ($self._services) {
-                        $services = $self._services
-                        Write-Log -Level Warning -Message "Dashboard Init: Using stored services"
-                    }
-                    else {
-                        throw "No services available for dashboard initialization"
-                    }
+                    throw "Services parameter is required for dashboard initialization"
                 }
                 
                 # Store services on screen instance
                 $self._services = $services
                 
-                # Validate critical services exist
+                # Validate critical services exist with detailed error reporting
                 if (-not $services.Navigation) {
-                    throw "Navigation service is missing for dashboard"
+                    $availableServices = ($services.Keys | Sort-Object) -join ", "
+                    throw "Navigation service is missing. Available services: $availableServices"
                 }
                 
-                Write-Log -Level Info -Message "Dashboard Init: Services validated successfully"
+                if (-not $services.Navigation.GoTo) {
+                    throw "Navigation service is missing GoTo method"
+                }
+                
+                Write-Log -Level Info -Message "Dashboard Init: Services validated successfully" -Data @{ Component = "Dashboard.Init" }
                 
                 # Create simple root panel
                 $rootPanel = New-TuiStackPanel -Props @{
@@ -102,25 +101,40 @@ function Get-DashboardScreen {
                     OnRowSelect = {
                         param($SelectedData, $SelectedIndex)
                         
-                        if (-not $SelectedData) {
-                            Write-Log -Level Warning -Message "Dashboard: OnRowSelect called with null data"
-                            return
-                        }
-                        
-                        $path = $SelectedData.Path
-                        if ([string]::IsNullOrWhiteSpace($path)) {
-                            Write-Log -Level Warning -Message "Dashboard: No path in selected data"
-                            return
-                        }
-                        
-                        Write-Log -Level Info -Message "Dashboard: Navigating to $path"
-                        
-                        if ($path -eq "/exit") {
-                            Stop-TuiEngine
-                            return
-                        }
-                        
-                        $capturedServices.Navigation.GoTo($path, $capturedServices)
+                        Invoke-WithErrorHandling -ScriptBlock {
+                            # AI: Robust parameter validation
+                            if (-not $SelectedData) {
+                                Write-Log -Level Warning -Message "Dashboard: OnRowSelect called with null data" -Data @{ Component = "Dashboard.OnRowSelect" }
+                                return
+                            }
+                            
+                            $path = $SelectedData.Path
+                            if ([string]::IsNullOrWhiteSpace($path)) {
+                                Write-Log -Level Warning -Message "Dashboard: No path in selected data" -Data @{ Component = "Dashboard.OnRowSelect" }
+                                return
+                            }
+                            
+                            Write-Log -Level Info -Message "Dashboard: Navigating to $path" -Data @{ Component = "Dashboard.OnRowSelect"; Path = $path }
+                            
+                            if ($path -eq "/exit") {
+                                Stop-TuiEngine
+                                return
+                            }
+                            
+                            # AI: Simplified services validation
+                            if (-not $capturedServices -or -not $capturedServices.Navigation -or -not $capturedServices.Navigation.GoTo) {
+                                $errorMsg = "Navigation service not properly initialized"
+                                Write-Log -Level Error -Message "Dashboard: $errorMsg" -Data @{ Component = "Dashboard.OnRowSelect" }
+                                Show-AlertDialog -Title "Navigation Error" -Message $errorMsg
+                                return
+                            }
+                            
+                            # Call navigation service
+                            $result = $capturedServices.Navigation.GoTo($path)
+                            if (-not $result) {
+                                Write-Log -Level Warning -Message "Dashboard: Navigation to $path failed" -Data @{ Component = "Dashboard.OnRowSelect"; Path = $path }
+                            }
+                        } -Component "Dashboard.OnRowSelect" -Context "MenuSelection"
                     }
                 }
                 
@@ -152,20 +166,27 @@ function Get-DashboardScreen {
                 # Helper function to refresh dynamic data on the dashboard
                 $self.RefreshDashboardStats = {
                     param($self)
-                    Invoke-WithErrorHandling -Component "Dashboard.RefreshStats" -Context "RefreshStats" -ScriptBlock {
+                    Invoke-WithErrorHandling -ScriptBlock {
+                        # AI: Robust data access with null checks
                         $openTasks = 0
                         if ($global:Data -and $global:Data.Tasks) {
-                            # Access the .Completed property of each [PmcTask] object
                             $openTasks = ($global:Data.Tasks.Where({ -not $_.Completed })).Count
                         }
-                        $self.Components.statsLabel.Text = "Open Tasks: $openTasks"
+                        
+                        if ($self.Components -and $self.Components.statsLabel) {
+                            $self.Components.statsLabel.Text = "Open Tasks: $openTasks"
+                        }
+                        else {
+                            Write-Log -Level Warning -Message "Dashboard RefreshStats: statsLabel component not available" -Data @{ Component = "Dashboard.RefreshStats" }
+                        }
+                        
                         Request-TuiRefresh
-                    }
+                    } -Component "Dashboard.RefreshStats" -Context "RefreshStats"
                 }
                 
                 # Subscribe to data changes to keep the dashboard live
                 $subscriptionId = Subscribe-Event -EventName "Tasks.Changed" -Handler {
-                    Write-Log -Level Debug -Message "Dashboard received Tasks.Changed event"
+                    Write-Log -Level Debug -Message "Dashboard received Tasks.Changed event" -Data @{ Component = "Dashboard" }
                     & $self.RefreshDashboardStats -self $self
                 } -Source "DashboardScreen"
                 $self._subscriptions += $subscriptionId
@@ -176,8 +197,8 @@ function Get-DashboardScreen {
                 # Set initial focus
                 Request-Focus -Component $navigationMenu
                 
-                Write-Log -Level Info -Message "Dashboard Init: Completed successfully"
-            }
+                Write-Log -Level Info -Message "Dashboard Init: Completed successfully" -Data @{ Component = "Dashboard.Init" }
+            } -Component "Dashboard.Init" -Context "Initialize"
         }
         
         HandleInput = {
@@ -185,9 +206,9 @@ function Get-DashboardScreen {
             
             if (-not $key) { return $false }
             
-            Invoke-WithErrorHandling -Component "Dashboard.HandleInput" -Context "HandleInput" -ScriptBlock {
+            Invoke-WithErrorHandling -ScriptBlock {
                 if (-not $self._navigationMenu) {
-                    Write-Log -Level Warning -Message "Dashboard HandleInput: Navigation menu not available"
+                    Write-Log -Level Warning -Message "Dashboard HandleInput: Navigation menu not available" -Data @{ Component = "Dashboard.HandleInput" }
                     return $false
                 }
                 
@@ -198,15 +219,29 @@ function Get-DashboardScreen {
                     $menuData = @($self._navigationMenu.Data)
                     
                     if ($index -eq 0) {
-                        Write-Log -Level Info -Message "Dashboard: Exit via hotkey"
+                        Write-Log -Level Info -Message "Dashboard: Exit via hotkey" -Data @{ Component = "Dashboard.HandleInput" }
                         Stop-TuiEngine
                         return $true
                     }
                     
                     $selectedItem = $menuData | Where-Object { $_.Index -eq $index.ToString() }
-                    if ($selectedItem -and $self._services -and $self._services.Navigation) {
-                        & $self._services.Navigation.GoTo -self $self._services.Navigation -Path $selectedItem.Path -Services $self._services
+                    if ($selectedItem) {
+                        # AI: Simplified navigation validation and call
+                        if (-not $self._services -or -not $self._services.Navigation -or -not $self._services.Navigation.GoTo) {
+                            Write-Log -Level Error -Message "Dashboard HandleInput: Navigation service not properly initialized" -Data @{ Component = "Dashboard.HandleInput" }
+                            return $false
+                        }
+                        
+                        $result = $self._services.Navigation.GoTo($selectedItem.Path)
+                        if (-not $result) {
+                            Write-Log -Level Warning -Message "Dashboard HandleInput: Navigation to $($selectedItem.Path) failed" -Data @{ Component = "Dashboard.HandleInput"; Path = $selectedItem.Path }
+                            return $false
+                        }
                         return $true
+                    }
+                    else {
+                        Write-Log -Level Warning -Message "Dashboard HandleInput: Menu item not found for index $index" -Data @{ Component = "Dashboard.HandleInput"; Index = $index }
+                        return $false
                     }
                 }
                 
@@ -216,12 +251,12 @@ function Get-DashboardScreen {
                 }
                 
                 return $false
-            }
+            } -Component "Dashboard.HandleInput" -Context "HandleInput"
         }
         
         OnEnter = {
             param($self)
-            Write-Log -Level Info -Message "Dashboard OnEnter"
+            Write-Log -Level Info -Message "Dashboard OnEnter" -Data @{ Component = "Dashboard.OnEnter" }
             
             # Ensure focus on menu and refresh stats in case data changed while away
             if ($self._navigationMenu) {
@@ -235,25 +270,25 @@ function Get-DashboardScreen {
         
         OnExit = {
             param($self)
-            Write-Log -Level Info -Message "Dashboard OnExit: Cleaning up"
+            Write-Log -Level Info -Message "Dashboard OnExit: Cleaning up" -Data @{ Component = "Dashboard.OnExit" }
             
-            Invoke-WithErrorHandling -Component "Dashboard.OnExit" -Context "Cleanup" -ScriptBlock {
-                # Unsubscribe from all events to prevent memory leaks
+            Invoke-WithErrorHandling -ScriptBlock {
+                # AI: Safe event cleanup with proper error handling
                 if ($self._subscriptions -and @($self._subscriptions).Count -gt 0) {
                     foreach ($subId in $self._subscriptions) {
                         if ($subId) {
                             try {
                                 Unsubscribe-Event -HandlerId $subId
-                                Write-Log -Level Debug -Message "Dashboard unsubscribed from event: $subId"
+                                Write-Log -Level Debug -Message "Dashboard unsubscribed from event: $subId" -Data @{ Component = "Dashboard.OnExit"; SubscriptionId = $subId }
                             }
                             catch {
-                                Write-Log -Level Warning -Message "Dashboard failed to unsubscribe from event $subId : $_"
+                                Write-Log -Level Warning -Message "Dashboard failed to unsubscribe from event $subId : $_" -Data @{ Component = "Dashboard.OnExit"; SubscriptionId = $subId; Error = $_ }
                             }
                         }
                     }
                     $self._subscriptions = @()
                 }
-            }
+            } -Component "Dashboard.OnExit" -Context "Cleanup"
         }
         
         Render = {

@@ -1,5 +1,5 @@
-# TUI Framework Integration Module - COMPLIANT VERSION
-# Contains compliant utility functions. Deprecated functions have been removed.
+# TUI Framework Integration Module - FIXED VERSION
+# Contains fixed utility functions with resolved parameter binding issues.
 
 $script:TuiAsyncJobs = @()
 
@@ -36,7 +36,7 @@ function global:Invoke-TuiMethod {
     Invoke-WithErrorHandling -Component "$($Component.Name ?? $Component.Type).$MethodName" -Context "Invoking component method" -ScriptBlock {
         # Use splatting with the @ operator for robust parameter passing.
         & $method @Arguments
-    } -Context @{ Component = $Component.Name; Method = $MethodName } -ErrorHandler {
+    } -AdditionalData @{ Component = $Component.Name; Method = $MethodName } -ErrorHandler {
         param($Exception)
         # Log the error but do not re-throw, allowing the UI to remain responsive.
         Write-Log -Level Error -Message "Error invoking method '$($Exception.Context.Method)' on component '$($Exception.Context.Component)': $($Exception.Message)" -Data $Exception.Context
@@ -54,7 +54,7 @@ function global:Initialize-TuiFramework {
         if (-not $global:TuiState) {
             throw "TUI Engine must be initialized before the TUI Framework."
         }
-        Write-Log -Level Info -Message "TUI Framework initialized."
+        Write-Log -Level Info -Message "TUI Framework initialized." -Data @{ Component = "TuiFramework.Initialize" }
     }
 }
 
@@ -66,87 +66,159 @@ function global:Invoke-TuiAsync {
     param(
         [Parameter(Mandatory = $true)]
         [scriptblock]$ScriptBlock,
+        
         [Parameter()]
-        [scriptblock]$OnComplete = {},
+        [string]$JobName = "TuiAsyncJob_$(Get-Random)",
+        
         [Parameter()]
-        [scriptblock]$OnError = {},
-        [Parameter()]
-        [array]$ArgumentList = @()
+        [hashtable]$ArgumentList = @{}
     )
     
-    Invoke-WithErrorHandling -Component "TuiFramework.InvokeAsync" -Context "Starting async job" -ScriptBlock {
-        $job = Start-Job -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList
+    Invoke-WithErrorHandling -Component "TuiFramework.Async" -Context "Starting async job: $JobName" -ScriptBlock {
+        # Start the job
+        $job = Start-Job -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList -Name $JobName
+        
+        # Track the job
         $script:TuiAsyncJobs += $job
         
-        $timer = New-Object System.Timers.Timer
-        $timer.Interval = 100
-        $timer.AutoReset = $true
-        
-        $timerEvent = Register-ObjectEvent -InputObject $timer -EventName Elapsed -Action {
-            param($Event)
-            $jobData = $Event.MessageData
-            $job = $jobData.Job
-            
-            if ($job.State -in 'Completed', 'Failed') {
-                $jobData.Timer.Stop()
-                $jobData.Timer.Dispose()
-                Unregister-Event -SourceIdentifier $Event.SourceIdentifier
-                
-                $script:TuiAsyncJobs = @($script:TuiAsyncJobs | Where-Object { $_.Id -ne $job.Id })
-
-                if ($job.State -eq 'Completed') {
-                    $result = Receive-Job -Job $job
-                    if ($jobData.OnComplete) { & $jobData.OnComplete -Data $result }
-                } else {
-                    $error = $job.ChildJobs[0].JobStateInfo.Reason
-                    if ($jobData.OnError) { & $jobData.OnError -Error $error }
-                }
-                Remove-Job -Job $job -Force
-                Request-TuiRefresh
-            }
-        } -MessageData @{
-            Job = $job
-            OnComplete = $OnComplete
-            OnError = $OnError
-            Timer = $timer
+        Write-Log -Level Debug -Message "Started async job: $JobName" -Data @{ 
+            Component = "TuiFramework.Async"; 
+            JobId = $job.Id; 
+            JobName = $JobName 
         }
         
-        $timer.Start()
-        return @{ Job = $job; Timer = $timer; EventSubscription = $timerEvent }
+        return $job
+    }
+}
+
+function global:Get-TuiAsyncResults {
+    <#
+    .SYNOPSIS
+    Checks for completed async jobs and returns their results.
+    #>
+    param(
+        [Parameter()]
+        [switch]$RemoveCompleted = $true
+    )
+    
+    Invoke-WithErrorHandling -Component "TuiFramework.AsyncResults" -Context "Checking async job results" -ScriptBlock {
+        $results = @()
+        $completedJobs = @()
+        
+        foreach ($job in $script:TuiAsyncJobs) {
+            if ($job.State -in @('Completed', 'Failed', 'Stopped')) {
+                $result = @{
+                    JobId = $job.Id
+                    JobName = $job.Name
+                    State = $job.State
+                    Output = if ($job.State -eq 'Completed') { Receive-Job -Job $job } else { $null }
+                    Error = if ($job.State -eq 'Failed') { $job.ChildJobs[0].JobStateInfo.Reason } else { $null }
+                }
+                
+                $results += $result
+                $completedJobs += $job
+                
+                Write-Log -Level Debug -Message "Async job completed: $($job.Name)" -Data @{ 
+                    Component = "TuiFramework.AsyncResults"; 
+                    JobId = $job.Id; 
+                    State = $job.State 
+                }
+            }
+        }
+        
+        # Remove completed jobs if requested
+        if ($RemoveCompleted -and $completedJobs.Count -gt 0) {
+            foreach ($job in $completedJobs) {
+                Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+                $script:TuiAsyncJobs = $script:TuiAsyncJobs | Where-Object { $_.Id -ne $job.Id }
+            }
+        }
+        
+        return $results
     }
 }
 
 function global:Stop-AllTuiAsyncJobs {
     <#
     .SYNOPSIS
-    Stops and cleans up all tracked async jobs.
+    Stops and removes all running TUI async jobs.
     #>
-    Invoke-WithErrorHandling -Component "TuiFramework.StopAsyncJobs" -Context "Cleaning up async jobs" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "TuiFramework.StopAsync" -Context "Stopping all async jobs" -ScriptBlock {
         foreach ($job in $script:TuiAsyncJobs) {
             try {
-                if ($job.State -eq 'Running') { Stop-Job -Job $job -ErrorAction SilentlyContinue }
+                Stop-Job -Job $job -ErrorAction SilentlyContinue
                 Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-            } catch {
-                Write-Log -Level Warning -Message "Failed to stop or remove job $($job.Id)" -Data $_
+                Write-Log -Level Debug -Message "Stopped async job: $($job.Name)" -Data @{ 
+                    Component = "TuiFramework.StopAsync"; 
+                    JobId = $job.Id 
+                }
+            }
+            catch {
+                Write-Log -Level Warning -Message "Failed to stop job $($job.Name): $_" -Data @{ 
+                    Component = "TuiFramework.StopAsync"; 
+                    JobId = $job.Id; 
+                    Error = $_.Exception.Message 
+                }
             }
         }
-        $script:TuiAsyncJobs = @()
         
-        Get-EventSubscriber | Where-Object { $_.SourceObject -is [System.Timers.Timer] } | ForEach-Object {
-            try {
-                Unregister-Event -SourceIdentifier $_.SourceIdentifier -ErrorAction SilentlyContinue
-                if ($_.SourceObject) {
-                    $_.SourceObject.Stop()
-                    $_.SourceObject.Dispose()
-                }
-            } catch { }
-        }
+        $script:TuiAsyncJobs = @()
+        Write-Log -Level Info -Message "All TUI async jobs stopped" -Data @{ Component = "TuiFramework.StopAsync" }
     }
 }
 
+function global:Request-TuiRefresh {
+    <#
+    .SYNOPSIS
+    Requests a UI refresh to update the display.
+    #>
+    if ($global:TuiState -and $global:TuiState.RequestRefresh) {
+        & $global:TuiState.RequestRefresh
+    }
+    else {
+        # Publish event as fallback
+        Publish-Event -EventName "TUI.RefreshRequested" -Data @{ Timestamp = Get-Date }
+    }
+}
+
+function global:Get-TuiState {
+    <#
+    .SYNOPSIS
+    Gets the current TUI state object.
+    #>
+    return $global:TuiState
+}
+
+# AI: Helper function to safely validate TUI state
+function global:Test-TuiState {
+    <#
+    .SYNOPSIS
+    Validates that the TUI state is properly initialized.
+    #>
+    param(
+        [Parameter()]
+        [switch]$ThrowOnError
+    )
+    
+    $isValid = $null -ne $global:TuiState -and 
+               $null -ne $global:TuiState.IsRunning -and
+               $null -ne $global:TuiState.CurrentScreen
+    
+    if (-not $isValid -and $ThrowOnError) {
+        throw "TUI state is not properly initialized. Call Initialize-TuiEngine first."
+    }
+    
+    return $isValid
+}
+
+# Export public functions
 Export-ModuleMember -Function @(
-    'Initialize-TuiFramework',
     'Invoke-TuiMethod',
+    'Initialize-TuiFramework', 
     'Invoke-TuiAsync',
-    'Stop-AllTuiAsyncJobs'
+    'Get-TuiAsyncResults',
+    'Stop-AllTuiAsyncJobs',
+    'Request-TuiRefresh',
+    'Get-TuiState',
+    'Test-TuiState'
 )

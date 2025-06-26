@@ -1,6 +1,6 @@
-# Error Handling Utilities Module for PMC Terminal v5
-# Provides centralized error handling and logging functionality
-# AI: Core utility module for robust error handling across all components
+# Fixed Error Handling Utilities Module for PMC Terminal v5
+# Provides centralized error handling with consistent parameter patterns
+# AI: Simplified and robust error handling to prevent parameter binding conflicts
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -19,84 +19,118 @@ enum LogLevel {
     Critical = 4
 }
 
-# Invoke-WithErrorHandling - Wraps code blocks with consistent error handling
+# AI: Simplified Invoke-WithErrorHandling with consistent parameter pattern
 function Invoke-WithErrorHandling {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true, Position = 0)]
         [string]$Component,
         
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true, Position = 1)]
         [string]$Context,
         
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true, Position = 2)]
         [scriptblock]$ScriptBlock,
         
         [Parameter(Mandatory = $false)]
-        [scriptblock]$ErrorHandler = $null,
-        
-        [Parameter(Mandatory = $false)]
-        [scriptblock]$FinallyBlock = $null,
-        
-        [Parameter(Mandatory = $false)]
-        [bool]$ContinueOnError = $false
+        [hashtable]$AdditionalData = @{}
     )
     
+    # Validate parameters
+    if ([string]::IsNullOrWhiteSpace($Component)) {
+        $Component = "Unknown"
+    }
+    if ([string]::IsNullOrWhiteSpace($Context)) {
+        $Context = "Unknown"
+    }
+    
     $startTime = [DateTime]::Now
-    $success = $false
     
     try {
         Write-Log -Level Debug -Message "Starting operation" -Component $Component -Context $Context
         
-        # Execute the main script block
+        # Execute the script block
         $result = & $ScriptBlock
         
-        $success = $true
         Write-Log -Level Debug -Message "Operation completed successfully" -Component $Component -Context $Context
-        
         return $result
     }
     catch {
-        $errorDetails = @{
+        # Create enriched error data
+        $errorData = @{
             Component = $Component
             Context = $Context
             Error = $_.Exception.Message
+            Exception = $_.Exception
             ScriptStackTrace = $_.ScriptStackTrace
-            InvocationInfo = $_.InvocationInfo.PositionMessage
             Duration = ([DateTime]::Now - $startTime).TotalMilliseconds
+            Timestamp = Get-Date
         }
         
-        Write-Log -Level Error -Message "Operation failed: $($_.Exception.Message)" -Component $Component -Context $Context -ErrorDetails $errorDetails
-        
-        # Execute custom error handler if provided
-        if ($null -ne $ErrorHandler) {
-            try {
-                & $ErrorHandler $_
-            }
-            catch {
-                Write-Log -Level Error -Message "Error handler failed: $_" -Component $Component -Context "$Context.ErrorHandler"
-            }
+        # Merge additional data
+        foreach ($key in $AdditionalData.Keys) {
+            $errorData[$key] = $AdditionalData[$key]
         }
+        
+        # Log the error
+        Write-Log -Level Error -Message "Error in '$Component' during '$Context': $($_.Exception.Message)" -ErrorDetails $errorData
         
         # Publish error event for global handling
-        Publish-Event -EventName "Application.Error" -Data $errorDetails
-        
-        if (-not $ContinueOnError) {
-            throw
+        if (Get-Command -Name "Publish-Event" -ErrorAction SilentlyContinue) {
+            Publish-Event -EventName "Application.Error" -Data $errorData
         }
+        
+        # Re-throw the original exception
+        throw
     }
     finally {
-        if ($null -ne $FinallyBlock) {
-            try {
-                & $FinallyBlock
-            }
-            catch {
-                Write-Log -Level Error -Message "Finally block failed: $_" -Component $Component -Context "$Context.Finally"
+        $duration = ([DateTime]::Now - $startTime).TotalMilliseconds
+        Write-Log -Level Debug -Message "Operation duration: $duration ms" -Component $Component -Context $Context
+    }
+}
+
+# AI: Simplified version for use in classes
+function Invoke-ClassMethod {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ClassName,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$MethodName,
+        
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$ScriptBlock,
+        
+        [Parameter()]
+        [hashtable]$Data = @{}
+    )
+    
+    # Ensure parameters are valid
+    $component = if ([string]::IsNullOrWhiteSpace($ClassName)) { "UnknownClass" } else { $ClassName }
+    $context = if ([string]::IsNullOrWhiteSpace($MethodName)) { "UnknownMethod" } else { $MethodName }
+    
+    try {
+        & $ScriptBlock
+    }
+    catch {
+        $errorInfo = @{
+            ClassName = $component
+            MethodName = $context
+            ErrorMessage = $_.Exception.Message
+            StackTrace = $_.ScriptStackTrace
+            Timestamp = Get-Date
+        }
+        
+        # Add any additional data
+        foreach ($key in $Data.Keys) {
+            if (-not $errorInfo.ContainsKey($key)) {
+                $errorInfo[$key] = $Data[$key]
             }
         }
         
-        $duration = ([DateTime]::Now - $startTime).TotalMilliseconds
-        Write-Log -Level Debug -Message "Operation duration: $duration ms" -Component $Component -Context $Context
+        Write-Log -Level Error -Message "[$component.$context] $($_.Exception.Message)" -ErrorDetails $errorInfo
+        throw
     }
 }
 
@@ -141,7 +175,7 @@ function Write-Log {
     
     # Add error details if provided
     if ($ErrorDetails.Count -gt 0) {
-        $logEntry += " | Details: " + ($ErrorDetails | ConvertTo-Json -Compress)
+        $logEntry += " | Details: " + ($ErrorDetails | ConvertTo-Json -Compress -Depth 3)
     }
     
     # Write to console with color coding
@@ -200,168 +234,11 @@ function Get-LogLevel {
     return $script:LogLevel
 }
 
-# Set-LogFilePath - Configure the log file path
-function Set-LogFilePath {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path
-    )
-    
-    $script:LogFilePath = $Path
-    Write-Log -Level Info -Message "Log file path set to: $Path" -Component "Logging"
-}
-
-# Get-LogFilePath - Get the current log file path
-function Get-LogFilePath {
-    return $script:LogFilePath
-}
-
-# Clear-LogFile - Clear the current log file
-function Clear-LogFile {
-    [CmdletBinding()]
-    param()
-    
-    if (Test-Path $script:LogFilePath) {
-        Remove-Item -Path $script:LogFilePath -Force
-        Write-Log -Level Info -Message "Log file cleared" -Component "Logging"
-    }
-}
-
-# Get-ErrorReport - Generate a detailed error report
-function Get-ErrorReport {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [System.Management.Automation.ErrorRecord]$ErrorRecord,
-        
-        [Parameter(Mandatory = $false)]
-        [hashtable]$AdditionalInfo = @{}
-    )
-    
-    $report = @{
-        Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        Message = $ErrorRecord.Exception.Message
-        Type = $ErrorRecord.Exception.GetType().FullName
-        TargetObject = $ErrorRecord.TargetObject
-        Category = $ErrorRecord.CategoryInfo.Category
-        Activity = $ErrorRecord.CategoryInfo.Activity
-        Reason = $ErrorRecord.CategoryInfo.Reason
-        ScriptName = $ErrorRecord.InvocationInfo.ScriptName
-        Line = $ErrorRecord.InvocationInfo.ScriptLineNumber
-        Column = $ErrorRecord.InvocationInfo.OffsetInLine
-        Statement = $ErrorRecord.InvocationInfo.Line
-        StackTrace = $ErrorRecord.ScriptStackTrace
-        FullyQualifiedErrorId = $ErrorRecord.FullyQualifiedErrorId
-    }
-    
-    # Add inner exception details if present
-    if ($null -ne $ErrorRecord.Exception.InnerException) {
-        $report.InnerException = @{
-            Message = $ErrorRecord.Exception.InnerException.Message
-            Type = $ErrorRecord.Exception.InnerException.GetType().FullName
-        }
-    }
-    
-    # Merge additional info
-    foreach ($key in $AdditionalInfo.Keys) {
-        $report[$key] = $AdditionalInfo[$key]
-    }
-    
-    return $report
-}
-
-# Format-ErrorForDisplay - Format an error for user-friendly display
-function Format-ErrorForDisplay {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [System.Management.Automation.ErrorRecord]$ErrorRecord,
-        
-        [Parameter(Mandatory = $false)]
-        [bool]$IncludeStackTrace = $false
-    )
-    
-    $display = [System.Text.StringBuilder]::new()
-    
-    [void]$display.AppendLine("═" * 60)
-    [void]$display.AppendLine("ERROR OCCURRED")
-    [void]$display.AppendLine("═" * 60)
-    [void]$display.AppendLine()
-    [void]$display.AppendLine("Message: $($ErrorRecord.Exception.Message)")
-    [void]$display.AppendLine("Type: $($ErrorRecord.Exception.GetType().Name)")
-    
-    if ($null -ne $ErrorRecord.InvocationInfo.ScriptName) {
-        [void]$display.AppendLine("Script: $($ErrorRecord.InvocationInfo.ScriptName)")
-        [void]$display.AppendLine("Line: $($ErrorRecord.InvocationInfo.ScriptLineNumber)")
-    }
-    
-    if ($IncludeStackTrace -and -not [string]::IsNullOrWhiteSpace($ErrorRecord.ScriptStackTrace)) {
-        [void]$display.AppendLine()
-        [void]$display.AppendLine("Stack Trace:")
-        [void]$display.AppendLine($ErrorRecord.ScriptStackTrace)
-    }
-    
-    [void]$display.AppendLine()
-    [void]$display.AppendLine("═" * 60)
-    
-    return $display.ToString()
-}
-
-# Initialize-ErrorHandling - Set up global error handling
-function Initialize-ErrorHandling {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $false)]
-        [string]$LogLevel = "Info",
-        
-        [Parameter(Mandatory = $false)]
-        [string]$LogPath = $null
-    )
-    
-    # Set log level
-    Set-LogLevel -Level $LogLevel
-    
-    # Set custom log path if provided
-    if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
-        Set-LogFilePath -Path $LogPath
-    }
-    
-    # Set global error action preference
-    $global:ErrorActionPreference = "Stop"
-    
-    # Register global error event handler
-    Register-EngineEvent -SourceIdentifier "Application.Error" -Action {
-        $errorData = $Event.MessageData
-        
-        # Log to Windows Event Log if available
-        try {
-            $source = "PMCTerminal"
-            if (-not [System.Diagnostics.EventLog]::SourceExists($source)) {
-                [System.Diagnostics.EventLog]::CreateEventSource($source, "Application")
-            }
-            
-            $message = "Component: $($errorData.Component)`nContext: $($errorData.Context)`nError: $($errorData.Error)"
-            [System.Diagnostics.EventLog]::WriteEntry($source, $message, [System.Diagnostics.EventLogEntryType]::Error)
-        }
-        catch {
-            # Silently fail if unable to write to event log
-        }
-    }
-    
-    Write-Log -Level Info -Message "Error handling initialized" -Component "ErrorHandling"
-}
-
 # Export all functions
 Export-ModuleMember -Function @(
     'Invoke-WithErrorHandling',
+    'Invoke-ClassMethod',
     'Write-Log',
     'Set-LogLevel',
-    'Get-LogLevel',
-    'Set-LogFilePath',
-    'Get-LogFilePath',
-    'Clear-LogFile',
-    'Get-ErrorReport',
-    'Format-ErrorForDisplay',
-    'Initialize-ErrorHandling'
+    'Get-LogLevel'
 )

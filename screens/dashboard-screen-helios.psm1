@@ -1,4 +1,4 @@
-# Dashboard Screen - Refactored for Service-Oriented Architecture
+# Dashboard Screen - Fixed Parameter Binding Issues
 # Displays dynamic data and uses direct service calls and eventing.
 
 using module '..\modules\models.psm1'
@@ -14,6 +14,11 @@ using module '..\layout\panels.psm1'
 function Get-DashboardScreen {
     param([hashtable]$Services)
     
+    # AI: Ensure services are stored on the screen object
+    if (-not $Services -and $global:Services) {
+        $Services = $global:Services
+    }
+    
     $screen = @{
         Name = "DashboardScreen"
         Components = @{}
@@ -26,6 +31,11 @@ function Get-DashboardScreen {
         
         Init = {
             param($self, $services)
+            
+            # AI: Ensure services are available even if not passed directly
+            if (-not $services -and $self._services) {
+                $services = $self._services
+            }
             
             Invoke-WithErrorHandling -ScriptBlock {
                 # AI: Simplified and robust services validation
@@ -42,11 +52,8 @@ function Get-DashboardScreen {
                     throw "Navigation service is missing. Available services: $availableServices"
                 }
                 
-                if (-not $services.Navigation.GoTo) {
-                    throw "Navigation service is missing GoTo method"
-                }
-                
-                Write-Log -Level Info -Message "Dashboard Init: Services validated successfully" -Data @{ Component = "Dashboard.Init" }
+                # AI: Fixed Write-Log call - removed Context from Data to avoid duplication
+                Write-Log -Level Info -Message "Dashboard Init: Services validated successfully" -Data @{ Component = "Dashboard"; Operation = "Init" }
                 
                 # Create simple root panel
                 $rootPanel = New-TuiStackPanel -Props @{
@@ -67,26 +74,30 @@ function Get-DashboardScreen {
                 
                 # Add instruction label
                 $instructionLabel = New-TuiLabel -Props @{
-                    Text = "Use Arrow Keys or Number Keys to Navigate"
+                    Text = "Select an option using number keys (1-4) or use arrow keys and Enter"
+                    X = 1
+                    Y = 1
+                    Width = 50
                     Height = 1
-                    Width = "100%"
+                    Name = "InstructionLabel"
                 }
-                & $rootPanel.AddChild -self $rootPanel -Child $instructionLabel | Out-Null
+                & $rootPanel.AddChild -self $rootPanel -Child $instructionLabel
                 
-                # Create menu data
+                # Create main navigation menu items
                 $menuItems = @(
-                    @{ Index = "1"; Action = "View Tasks"; Path = "/tasks" }
-                    @{ Index = "2"; Action = "View Projects"; Path = "/projects" }
-                    @{ Index = "3"; Action = "Reports"; Path = "/reports" }
-                    @{ Index = "4"; Action = "Settings"; Path = "/settings" }
-                    @{ Index = "0"; Action = "Exit"; Path = "/exit" }
+                    @{ Index = "1"; Action = "Task Management"; Path = "/tasks" }
+                    @{ Index = "2"; Action = "Project Management"; Path = "/projects" }
+                    @{ Index = "3"; Action = "Settings"; Path = "/settings" }
+                    @{ Index = "4"; Action = "Reports"; Path = "/reports" }
+                    @{ Index = "0"; Action = "Exit Application"; Path = "/exit" }
                 )
                 
-                # Capture services for component callbacks
+                # AI: Capture services for closure scope
                 $capturedServices = $services
                 
+                # Create navigation menu component
                 $navigationMenu = New-TuiDataTable -Props @{
-                    Name = "navigationMenu"
+                    Name = "NavigationMenu"
                     IsFocusable = $true
                     ShowBorder = $true
                     BorderStyle = "Double"
@@ -121,51 +132,57 @@ function Get-DashboardScreen {
                                 return
                             }
                             
-                            # AI: Simplified services validation
-                            if (-not $capturedServices -or -not $capturedServices.Navigation -or -not $capturedServices.Navigation.GoTo) {
+                            # AI: Fixed navigation service call for class-based implementation
+                            if (-not $capturedServices -or -not $capturedServices.Navigation) {
                                 $errorMsg = "Navigation service not properly initialized"
-                                Write-Log -Level Error -Message "Dashboard: $errorMsg" -Data @{ Component = "Dashboard.OnRowSelect" }
-                                Show-AlertDialog -Title "Navigation Error" -Message $errorMsg
-                                return
+                                Write-Log -Level Error -Message $errorMsg -Data @{ Component = "Dashboard.OnRowSelect" }
+                                throw $errorMsg
                             }
                             
-                            # Call navigation service
-                            $result = $capturedServices.Navigation.GoTo($path)
-                            if (-not $result) {
-                                Write-Log -Level Warning -Message "Dashboard: Navigation to $path failed" -Data @{ Component = "Dashboard.OnRowSelect"; Path = $path }
+                            # Navigate to selected screen using proper class method call
+                            try {
+                                # For class-based navigation service
+                                if ($capturedServices.Navigation.GetType().Name -eq 'NavigationService') {
+                                    [void]$capturedServices.Navigation.GoTo($path, @{})
+                                }
+                                # For scriptblock-based navigation (fallback)
+                                elseif ($capturedServices.Navigation.GoTo -is [scriptblock]) {
+                                    & $capturedServices.Navigation.GoTo -self $capturedServices.Navigation -Path $path
+                                }
+                                else {
+                                    throw "Navigation service GoTo method not found or incompatible"
+                                }
                             }
-                        } -Component "Dashboard.OnRowSelect" -Context "MenuSelection"
+                            catch {
+                                Write-Log -Level Error -Message "Navigation failed: $_" -Data @{ Component = "Dashboard.OnRowSelect"; Path = $path }
+                                throw
+                            }
+                        } -Component "Dashboard.OnRowSelect" -Context "Navigation"
                     }
                 }
                 
-                & $navigationMenu.ProcessData -self $navigationMenu
-                & $rootPanel.AddChild -self $rootPanel -Child $navigationMenu | Out-Null
-                $self.Components.navigationMenu = $navigationMenu
+                # Add navigation menu to root panel
+                & $rootPanel.AddChild -self $rootPanel -Child $navigationMenu
                 $self._navigationMenu = $navigationMenu
                 
-                # Add dynamic stats label
+                # Add stats display
                 $statsLabel = New-TuiLabel -Props @{
-                    Name = "statsLabel"
-                    Text = "Loading stats..."
-                    Margin = @{ Top = 1 }
-                    Width = "100%"
-                    HorizontalAlignment = "Center"
+                    Text = "Loading statistics..."
+                    X = 1
+                    Y = 20
+                    Width = 50
+                    Height = 1
+                    Name = "StatsLabel"
+                    ForegroundColor = "Gray"
                 }
-                & $rootPanel.AddChild -self $rootPanel -Child $statsLabel | Out-Null
+                
+                & $rootPanel.AddChild -self $rootPanel -Child $statsLabel
                 $self.Components.statsLabel = $statsLabel
                 
-                # Add status label at bottom
-                $footerLabel = New-TuiLabel -Props @{
-                    Text = "Press ESC to return to this menu from any screen"
-                    Height = 1
-                    Width = "100%"
-                    Margin = @{ Top = 1 }
-                }
-                & $rootPanel.AddChild -self $rootPanel -Child $footerLabel | Out-Null
-                
-                # Helper function to refresh dynamic data on the dashboard
+                # Create refresh function
                 $self.RefreshDashboardStats = {
                     param($self)
+                    
                     Invoke-WithErrorHandling -ScriptBlock {
                         # AI: Robust data access with null checks
                         $openTasks = 0
@@ -197,8 +214,8 @@ function Get-DashboardScreen {
                 # Set initial focus
                 Request-Focus -Component $navigationMenu
                 
-                Write-Log -Level Info -Message "Dashboard Init: Completed successfully" -Data @{ Component = "Dashboard.Init" }
-            } -Component "Dashboard.Init" -Context "Initialize"
+                Write-Log -Level Info -Message "Dashboard Init: Completed successfully" -Data @{ Component = "Dashboard"; Operation = "Init.Complete" }
+            } -Component "Dashboard" -Context "Init"
         }
         
         HandleInput = {
@@ -208,14 +225,16 @@ function Get-DashboardScreen {
             
             Invoke-WithErrorHandling -ScriptBlock {
                 if (-not $self._navigationMenu) {
-                    Write-Log -Level Warning -Message "Dashboard HandleInput: Navigation menu not available" -Data @{ Component = "Dashboard.HandleInput" }
+                    # AI: Fixed Write-Log call - removed Context from Data to avoid duplication
+                    Write-Log -Level Warning -Message "Dashboard HandleInput: Navigation menu not available" -Data @{ Component = "Dashboard"; Operation = "HandleInput" }
                     return $false
                 }
                 
-                # Handle number key shortcuts
+                # Handle number key shortcuts for quick navigation
                 if ($key.KeyChar -match '[0-4]') {
                     $index = [int]$key.KeyChar
                     
+                    # Get menu data for selection
                     $menuData = @($self._navigationMenu.Data)
                     
                     if ($index -eq 0) {
@@ -224,24 +243,22 @@ function Get-DashboardScreen {
                         return $true
                     }
                     
+                    # Find and select the item with matching index
                     $selectedItem = $menuData | Where-Object { $_.Index -eq $index.ToString() }
-                    if ($selectedItem) {
-                        # AI: Simplified navigation validation and call
-                        if (-not $self._services -or -not $self._services.Navigation -or -not $self._services.Navigation.GoTo) {
-                            Write-Log -Level Error -Message "Dashboard HandleInput: Navigation service not properly initialized" -Data @{ Component = "Dashboard.HandleInput" }
-                            return $false
+                    if ($selectedItem -and $self._services -and $self._services.Navigation) {
+                        # AI: Use proper navigation call based on service type
+                        try {
+                            if ($self._services.Navigation.GetType().Name -eq 'NavigationService') {
+                                [void]$self._services.Navigation.GoTo($selectedItem.Path, @{})
+                            }
+                            elseif ($self._services.Navigation.GoTo -is [scriptblock]) {
+                                & $self._services.Navigation.GoTo -self $self._services.Navigation -Path $selectedItem.Path
+                            }
+                            return $true
                         }
-                        
-                        $result = $self._services.Navigation.GoTo($selectedItem.Path)
-                        if (-not $result) {
-                            Write-Log -Level Warning -Message "Dashboard HandleInput: Navigation to $($selectedItem.Path) failed" -Data @{ Component = "Dashboard.HandleInput"; Path = $selectedItem.Path }
-                            return $false
+                        catch {
+                            Write-Log -Level Error -Message "Hotkey navigation failed: $_" -Data @{ Component = "Dashboard.HandleInput"; Path = $selectedItem.Path }
                         }
-                        return $true
-                    }
-                    else {
-                        Write-Log -Level Warning -Message "Dashboard HandleInput: Menu item not found for index $index" -Data @{ Component = "Dashboard.HandleInput"; Index = $index }
-                        return $false
                     }
                 }
                 
@@ -251,7 +268,7 @@ function Get-DashboardScreen {
                 }
                 
                 return $false
-            } -Component "Dashboard.HandleInput" -Context "HandleInput"
+            } -Component "Dashboard" -Context "HandleInput"
         }
         
         OnEnter = {
@@ -295,6 +312,11 @@ function Get-DashboardScreen {
             param($self)
             # The panel and components handle their own rendering
         }
+    }
+    
+    # AI: Attach services to screen object for later use
+    if ($Services) {
+        $screen._services = $Services
     }
     
     return $screen

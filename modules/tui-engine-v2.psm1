@@ -563,9 +563,9 @@ function Render-Frame {
         # should ONLY draw these non-component elements.
         if ($script:TuiState.CurrentScreen -and $script:TuiState.CurrentScreen.Render) {
             try {
-                Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).Render" -Context "Rendering screen chrome" -ScriptBlock {
-                    & $script:TuiState.CurrentScreen.Render -self $script:TuiState.CurrentScreen
-                } -AdditionalData @{ ScreenName = $script:TuiState.CurrentScreen.Name }
+            Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).Render" -Context "Rendering screen chrome" -ScriptBlock {
+            & $script:TuiState.CurrentScreen.Render -self $script:TuiState.CurrentScreen
+            } -AdditionalData @{ ScreenName = $script:TuiState.CurrentScreen.Name }
             } catch {
                 Write-Log -Level Error -Message "Screen-level render error: $($_.Exception.Message)" -Data $_
             }
@@ -635,7 +635,7 @@ function Render-Frame {
                 try {
                     Invoke-WithErrorHandling -Component "$($componentToRender.Name ?? $componentToRender.Type).Render" -Context "Rendering component" -ScriptBlock {
                         & $componentToRender.Render -self $componentToRender
-                    } -AdditionalData @{ ComponentType = $componentToRender.Type; ComponentName = $componentToRender.Name; ComponentProps = $componentToRender.Props }
+                    } -AdditionalData @{ ComponentType = $componentToRender.Type; ComponentName = $componentToRender.Name }
                 } catch {
                     Write-Log -Level Error -Message "Failed to render component '$($componentToRender.Name ?? $componentToRender.Type)': $($_.Exception.Message)" -Data $_
                     # Continue rendering other components
@@ -776,9 +776,17 @@ function global:Push-Screen {
         if ($Screen.Init) { 
             try {
                 Invoke-WithErrorHandling -Component "$($Screen.Name).Init" -Context "Screen initialization" -ScriptBlock {
-                    # Pass services if available on the screen object
+                    # AI: Ensure services are passed to screen init
+                    # Check for services in multiple locations
+                    $services = $null
                     if ($Screen._services) {
-                        & $Screen.Init -self $Screen -services $Screen._services
+                        $services = $Screen._services
+                    } elseif ($global:Services) {
+                        $services = $global:Services
+                    }
+                    
+                    if ($services) {
+                        & $Screen.Init -self $Screen -services $services
                     } else {
                         & $Screen.Init -self $Screen
                     }
@@ -1750,6 +1758,32 @@ function global:Get-WordWrappedLines {
 }
 #endregion
 
+function global:Stop-TuiEngine {
+    <#
+    .SYNOPSIS
+    Stops the TUI engine and exits the application gracefully
+    #>
+    param()
+    
+    Write-Log -Level Info -Message "Stop-TuiEngine called - shutting down application" -Data @{ Component = "TuiEngine" }
+    
+    # Set the running flag to false to exit the main loop
+    $script:TuiState.Running = $false
+    
+    # Cancel the input thread if available
+    if ($script:TuiState.CancellationTokenSource) {
+        try {
+            $script:TuiState.CancellationTokenSource.Cancel()
+        }
+        catch {
+            Write-Warning "Failed to cancel input thread: $_"
+        }
+    }
+    
+    # Publish shutdown event
+    Safe-PublishEvent -EventName "System.Shutdown" -Data @{ Reason = "User requested" }
+}
+
 # Build export list dynamically
 $exportFunctions = @(
     'Start-TuiLoop', 'Request-TuiRefresh', 'Push-Screen', 'Pop-Screen',
@@ -1759,7 +1793,7 @@ $exportFunctions = @(
     'Get-NextFocusableComponent', 'Handle-TabNavigation', 
     'New-Component', 'Apply-Layout',
     'Get-WordWrappedLines', 'Subscribe-TuiEvent',
-    'Render-Frame', 'Initialize-TuiEngine'
+    'Render-Frame', 'Initialize-TuiEngine', 'Stop-TuiEngine'
 )
 
 # Only export Get-ThemeColor if we defined it

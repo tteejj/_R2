@@ -177,9 +177,8 @@ function Start-PMCTerminal {
         
         # --- 6. Initialize TUI Engine and Navigate ---
         if (-not $Silent) { Write-Host "`nStarting TUI..." -ForegroundColor Green }
-        Clear-Host
         
-        Initialize-TuiEngine
+        Initialize-TuiEngine -Width 80 -Height 24
         
         $startPath = if ($args -contains "-start" -and ($args.IndexOf("-start") + 1) -lt $args.Count) {
             $args[$args.IndexOf("-start") + 1]

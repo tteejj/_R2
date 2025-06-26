@@ -84,22 +84,14 @@ function Return-CellToPool {
 
 function global:Initialize-TuiEngine {
     param(
-        [int]$Width = [Console]::WindowWidth,
-        [int]$Height = [Console]::WindowHeight - 1
+        [int]$Width = 80,
+        [int]$Height = 24
     )
 
-    # Patch: Always set defaults if not passed in
-    if (-not $Width) { $Width = [Console]::WindowWidth }
-    if (-not $Height) { $Height = [Console]::WindowHeight - 1 }
-    
     if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
         Write-Log -Level Info -Message "Initializing TUI Engine: ${Width}x${Height}"
     }
 
-   
-
-    
-    
     try {
         if ($Width -le 0 -or $Height -le 0) { throw "Invalid console dimensions: ${Width}x${Height}" }
         
@@ -118,9 +110,6 @@ function global:Initialize-TuiEngine {
                 $script:TuiState.BackBuffer[$y, $x] = @{ Char = ' '; FG = [ConsoleColor]::White; BG = [ConsoleColor]::Black }
             }
         }
-        
-        [Console]::CursorVisible = $false
-        [Console]::Clear() # Clear console to remove initialization messages
         
         # Initialize subsystems with error handling
         try { 
@@ -148,16 +137,6 @@ function global:Initialize-TuiEngine {
         
         # Track event handlers for cleanup (event system should already be initialized)
         $script:TuiState.EventHandlers = @{}
-        
-        # --- THE FIX: HOOK CTRL+C *BEFORE* STARTING THE INPUT THREAD ---
-        # Temporarily disabled due to compatibility issues
-        # TODO: Re-enable with proper PowerShell event handling
-        try {
-            [Console]::TreatControlCAsInput = $false
-            # Ctrl+C handler temporarily disabled - will terminate process normally
-        } catch {
-            Write-Warning "Could not set console input mode: $_"
-        }
         
         # Now it is safe to start the input thread.
         Initialize-InputThread
@@ -458,10 +437,6 @@ function global:Start-TuiLoop {
     param([hashtable]$InitialScreen = $null)
 
     try {
-        # Only initialize if not already initialized
-        if (-not $script:TuiState.BufferWidth -or $script:TuiState.BufferWidth -eq 0) {
-            Initialize-TuiEngine
-        }
         
         if ($InitialScreen) {
             Push-Screen -Screen $InitialScreen
@@ -473,6 +448,7 @@ function global:Start-TuiLoop {
         }
 
         $script:TuiState.Running = $true
+        [Console]::CursorVisible = $false
         $frameTime = New-Object System.Diagnostics.Stopwatch
         $targetFrameTime = 1000.0 / $script:TuiState.RenderStats.TargetFPS
         
@@ -647,7 +623,7 @@ function Render-Frame {
         Render-BufferOptimized
         
         # Force cursor to bottom-right to avoid interference
-        [Console]::SetCursorPosition($script:TuiState.BufferWidth - 1, $script:TuiState.BufferHeight - 1)
+        # [Console]::SetCursorPosition($script:TuiState.BufferWidth - 1, $script:TuiState.BufferHeight - 1)
         
     } catch {
         Write-Warning "Fatal Frame render error: $_"

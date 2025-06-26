@@ -120,7 +120,7 @@ function Get-DashboardScreen {
                             return
                         }
                         
-                        & $capturedServices.Navigation.GoTo -self $capturedServices.Navigation -Path $path -Services $capturedServices
+                        $capturedServices.Navigation.GoTo($path, $capturedServices)
                     }
                 }
                 

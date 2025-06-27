@@ -45,7 +45,7 @@ function Initialize-DataManager {
     [CmdletBinding()]
     param()
     
-    Invoke-WithErrorHandling -Component "DataManager.Initialize" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.Initialize" -Context "DataManager initialization" -ScriptBlock {
         # Ensure data directory exists
         $dataDirectory = Split-Path $script:DataPath -Parent
         if (-not (Test-Path $dataDirectory)) {
@@ -91,7 +91,7 @@ function Load-UnifiedData {
     [CmdletBinding()]
     param()
     
-    Invoke-WithErrorHandling -Component "DataManager.LoadData" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.LoadData" -Context "Loading unified data from disk" -ScriptBlock {
         if (Test-Path $script:DataPath) {
             try {
                 $content = Get-Content -Path $script:DataPath -Raw
@@ -168,7 +168,7 @@ function Save-UnifiedData {
     [CmdletBinding()]
     param()
     
-    Invoke-WithErrorHandling -Component "DataManager.SaveData" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.SaveData" -Context "Saving unified data to disk" -ScriptBlock {
         # Create backup if file exists
         if (Test-Path $script:DataPath) {
             $backupName = "pmc-data_{0:yyyyMMdd_HHmmss}.json" -f (Get-Date)
@@ -251,7 +251,7 @@ function Add-PmcTask {
         [string]$DueDate = ""
     )
     
-    Invoke-WithErrorHandling -Component "DataManager.AddTask" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.AddTask" -Context "Adding new task to data store" -ScriptBlock {
         # AI: Input validation
         if ([string]::IsNullOrWhiteSpace($Title)) {
             throw [StateMutationException]::new("Task title cannot be empty", @{ Title = $Title })
@@ -355,7 +355,7 @@ function Update-PmcTask {
         [int]$Progress
     )
     
-    Invoke-WithErrorHandling -Component "DataManager.UpdateTask" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.UpdateTask" -Context "Updating existing task" -ScriptBlock {
         # AI: Find task in list to ensure we're updating the managed instance
         $managedTask = $script:Data.Tasks | Where-Object { $_.Id -eq $Task.Id } | Select-Object -First 1
         
@@ -457,7 +457,7 @@ function Remove-PmcTask {
         [PmcTask]$Task
     )
     
-    Invoke-WithErrorHandling -Component "DataManager.RemoveTask" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.RemoveTask" -Context "Removing task from data store" -ScriptBlock {
         # AI: Find and remove task from strongly-typed list
         $taskToRemove = $script:Data.Tasks | Where-Object { $_.Id -eq $Task.Id } | Select-Object -First 1
         
@@ -514,7 +514,7 @@ function Get-PmcTasks {
         [string]$Category
     )
     
-    Invoke-WithErrorHandling -Component "DataManager.GetTasks" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.GetTasks" -Context "Retrieving tasks from data store" -ScriptBlock {
         # AI: Start with all tasks from strongly-typed list
         $tasks = $script:Data.Tasks
         
@@ -594,7 +594,7 @@ function Add-PmcProject {
         [PmcProject]$Project
     )
     
-    Invoke-WithErrorHandling -Component "DataManager.AddProject" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.AddProject" -Context "Adding new project to data store" -ScriptBlock {
         # AI: Check if project with same key already exists
         $existing = $script:Data.Projects | Where-Object { $_.Key -eq $Project.Key } | Select-Object -First 1
         
@@ -636,7 +636,7 @@ function Initialize-DataEventHandlers {
     [CmdletBinding()]
     param()
     
-    Invoke-WithErrorHandling -Component "DataManager.InitializeEventHandlers" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "DataManager.InitializeEventHandlers" -Context "Initializing data event handlers" -ScriptBlock {
         # AI: Subscribe to refresh request events for backward compatibility
         $null = Subscribe-Event -EventName "Tasks.RefreshRequested" -Handler {
             param($EventData)

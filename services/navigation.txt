@@ -6,7 +6,7 @@ function Initialize-NavigationService {
         [hashtable]$CustomRoutes = @{},
         [bool]$EnableBreadcrumbs = $true
     )
-    Invoke-WithErrorHandling -Component "NavigationService.Initialize" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "NavigationService.Initialize" -Context "Navigation service initialization" -ScriptBlock {
         # Default routes - can be overridden by CustomRoutes
         $defaultRoutes = @{
             "/dashboard" = @{ 
@@ -76,7 +76,7 @@ function Initialize-NavigationService {
                     [hashtable]$Params = @{},
                     [hashtable]$Services = $null
                 )
-                Invoke-WithErrorHandling -Component "NavigationService.GoTo" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.GoTo" -Context "Navigation to route" -ScriptBlock {
                     if ([string]::IsNullOrWhiteSpace($Path)) {
                         Write-Log -Level Error -Message "Navigation path cannot be empty"
                         return $false
@@ -157,26 +157,22 @@ function Initialize-NavigationService {
                         return $true
                     }
                     catch {
-                        throw [NavigationException]::new(
+                        throw [Helios.NavigationException]::new(
                             "Failed to create or navigate to screen for route '$Path'",
+                            "NavigationService.GoTo",
                             @{
                                 Route = $Path
                                 RouteConfig = $route
-                                OriginalException = $_
-                            }
+                            },
+                            $_.Exception
                         )
                     }
-                } -Context @{ Path = $Path; Params = $Params } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService GoTo error for path '$($Exception.Context.Path)': $($Exception.Message)" -Data $Exception.Context
-                    Show-AlertDialog -Title "Navigation Error" -Message "Failed to navigate to '$($Exception.Context.Path)': $($Exception.Message)"
-                    return $false
                 }
             }
             
             Back = { 
                 param($self, [int]$Steps = 1)
-                Invoke-WithErrorHandling -Component "NavigationService.Back" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.Back" -Context "Navigate back" -ScriptBlock {
                     for ($i = 0; $i -lt $Steps; $i++) {
                         if ($global:TuiState.ScreenStack.Count -le 1) {
                             Write-Log -Level Debug -Message "Cannot go back - at root screen"
@@ -188,51 +184,36 @@ function Initialize-NavigationService {
                         }
                     }
                     return $true
-                } -Context @{ Steps = $Steps } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService Back error: $($Exception.Message)" -Data $Exception.Context
-                    return $false
                 }
             }
             
             GetCurrentPath = {
                 param($self)
-                Invoke-WithErrorHandling -Component "NavigationService.GetCurrentPath" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.GetCurrentPath" -Context "Get current navigation path" -ScriptBlock {
                     if ($self._history.Count -eq 0) { return "/" }
                     return $self._history[-1].Path
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService GetCurrentPath error: $($Exception.Message)" -Data $Exception.Context
-                    return "/"
                 }
             }
             
             GetBreadcrumbs = {
                 param($self)
-                Invoke-WithErrorHandling -Component "NavigationService.GetBreadcrumbs" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.GetBreadcrumbs" -Context "Get navigation breadcrumbs" -ScriptBlock {
                     return $self._breadcrumbs
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService GetBreadcrumbs error: $($Exception.Message)" -Data $Exception.Context
-                    return @()
                 }
             }
             
             AddRoute = {
                 param($self, [string]$Path, [hashtable]$RouteConfig)
-                Invoke-WithErrorHandling -Component "NavigationService.AddRoute" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.AddRoute" -Context "Add navigation route" -ScriptBlock {
                     if (-not $RouteConfig.Factory) { throw "Route must have a Factory scriptblock" }
                     $self._routes[$Path] = $RouteConfig
                     Write-Log -Level Debug -Message "Added route: $Path"
-                } -Context @{ Path = $Path; RouteConfig = $RouteConfig } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService AddRoute error for path '$($Exception.Context.Path)': $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             RegisterRoute = {
                 param($self, [string]$Path, [scriptblock]$ScreenFactory)
-                Invoke-WithErrorHandling -Component "NavigationService.RegisterRoute" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.RegisterRoute" -Context "Register navigation route" -ScriptBlock {
                     # Convert the simpler RegisterRoute format to the AddRoute format
                     $routeConfig = @{
                         Factory = $ScreenFactory
@@ -242,83 +223,55 @@ function Initialize-NavigationService {
                     # Call AddRoute with the proper format
                     & $self.AddRoute -self $self -Path $Path -RouteConfig $routeConfig
                     Write-Log -Level Debug -Message "Registered route: $Path"
-                } -Context @{ Path = $Path } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService RegisterRoute error for path '$($Exception.Context.Path)': $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             RemoveRoute = {
                 param($self, [string]$Path)
-                Invoke-WithErrorHandling -Component "NavigationService.RemoveRoute" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.RemoveRoute" -Context "Remove navigation route" -ScriptBlock {
                     $self._routes.Remove($Path)
                     Write-Log -Level Debug -Message "Removed route: $Path"
-                } -Context @{ Path = $Path } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService RemoveRoute error for path '$($Exception.Context.Path)': $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             AddBeforeNavigateGuard = {
                 param($self, [scriptblock]$Guard)
-                Invoke-WithErrorHandling -Component "NavigationService.AddBeforeNavigateGuard" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.AddBeforeNavigateGuard" -Context "Add before navigate guard" -ScriptBlock {
                     $self._beforeNavigate += $Guard
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService AddBeforeNavigateGuard error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             AddAfterNavigateHook = {
                 param($self, [scriptblock]$Hook)
-                Invoke-WithErrorHandling -Component "NavigationService.AddAfterNavigateHook" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.AddAfterNavigateHook" -Context "Add after navigate hook" -ScriptBlock {
                     $self._afterNavigate += $Hook
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService AddAfterNavigateHook error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             _checkAuth = {
                 param($self)
-                Invoke-WithErrorHandling -Component "NavigationService._checkAuth" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService._checkAuth" -Context "Check authentication status" -ScriptBlock {
                     # Placeholder for authentication check
                     return $true
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService _checkAuth error: $($Exception.Message)" -Data $Exception.Context
-                    return $false
                 }
             }
             
             GetRoutes = {
                 param($self)
-                Invoke-WithErrorHandling -Component "NavigationService.GetRoutes" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.GetRoutes" -Context "Get available routes" -ScriptBlock {
                     return $self._routes.Keys | Sort-Object
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService GetRoutes error: $($Exception.Message)" -Data $Exception.Context
-                    return @()
                 }
             }
             
             IsValidRoute = {
                 param($self, [string]$Path)
-                Invoke-WithErrorHandling -Component "NavigationService.IsValidRoute" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "NavigationService.IsValidRoute" -Context "Check route validity" -ScriptBlock {
                     return $self._routes.ContainsKey($Path)
-                } -Context @{ Path = $Path } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "NavigationService IsValidRoute error for path '$($Exception.Context.Path)': $($Exception.Message)" -Data $Exception.Context
-                    return $false
                 }
             }
         }
         
         return $service
-    } -Context @{ CustomRoutes = $CustomRoutes; EnableBreadcrumbs = $EnableBreadcrumbs } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to initialize Navigation Service: $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 

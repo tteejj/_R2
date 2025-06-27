@@ -545,7 +545,7 @@ function global:New-TuiTextArea {
         Name = $Props.Name
         
         # Internal State
-        Lines = @((if ($null -ne $Props.Text) { $Props.Text } else { "" }) -split "`n")
+        Lines = @()
         CursorX = 0
         CursorY = 0
         ScrollOffset = 0
@@ -797,6 +797,13 @@ function global:New-TuiTextArea {
                 return $false
             }
         }
+    }
+    
+    # AI: Initialize Lines array from Text property (PowerShell 5.1 compatible)
+    if ($null -ne $Props.Text -and $Props.Text -ne "") {
+        $component.Lines = $Props.Text -split "`n"
+    } else {
+        $component.Lines = @("")
     }
     
     # Return as hashtable to allow dynamic property assignment

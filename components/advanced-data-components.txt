@@ -466,11 +466,8 @@ function global:New-TuiDataTable {
                                     $self.SelectedRows = @(0..($self.ProcessedData.Count - 1))
                                 }
                                 if ($self.OnSelectionChange) {
-                                    Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -ScriptBlock {
+                                    Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -Context "OnSelectionChange" -AdditionalData @{ ComponentName = $self.Name; SelectedRows = $self.SelectedRows } -ScriptBlock {
                                         & $self.OnSelectionChange -SelectedRows $self.SelectedRows
-                                    } -Context @{ Component = $self.Name; SelectedRows = $self.SelectedRows } -ErrorHandler {
-                                        param($Exception)
-                                        Write-Log -Level Error -Message "DataTable OnSelectionChange error: $($Exception.Message)" -Data $Exception.Context
                                     }
                                 }
                                 Request-TuiRefresh
@@ -579,11 +576,8 @@ function global:New-TuiDataTable {
                                 $self.SelectedRows += $self.SelectedRow
                             }
                             if ($self.OnSelectionChange) {
-                                Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -ScriptBlock {
+                                Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -Context "OnSelectionChange" -AdditionalData @{ ComponentName = $self.Name; SelectedRows = $self.SelectedRows } -ScriptBlock {
                                     & $self.OnSelectionChange -SelectedRows $self.SelectedRows
-                                } -Context @{ Component = $self.Name; SelectedRows = $self.SelectedRows } -ErrorHandler {
-                                    param($Exception)
-                                    Write-Log -Level Error -Message "DataTable OnSelectionChange error: $($Exception.Message)" -Data $Exception.Context
                                 }
                             }
                             Request-TuiRefresh
@@ -601,16 +595,14 @@ function global:New-TuiDataTable {
                     }
                     ([ConsoleKey]::Enter) {
                         if ($self.OnRowSelect -and $self.ProcessedData.Count -gt 0) {
-                            Invoke-WithErrorHandling -Component "$($self.Name).OnRowSelect" -ScriptBlock {
+                            # AI: FIX - Corrected the parameter conflict in AdditionalData
+                            Invoke-WithErrorHandling -Component "$($self.Name).OnRowSelect" -Context "OnRowSelect" -AdditionalData @{ ComponentName = $self.Name; SelectedRow = $self.SelectedRow; MultiSelect = $self.MultiSelect } -ScriptBlock {
                                 $selectedData = if ($self.MultiSelect) {
                                     @($self.SelectedRows | ForEach-Object { $self.ProcessedData[$_] })
                                 } else {
                                     $self.ProcessedData[$self.SelectedRow]
                                 }
                                 & $self.OnRowSelect -SelectedData $selectedData -SelectedIndex $self.SelectedRow
-                            } -Context @{ Component = $self.Name; SelectedRow = $self.SelectedRow; MultiSelect = $self.MultiSelect } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "DataTable OnRowSelect error: $($Exception.Message)" -Data $Exception.Context
                             }
                         }
                         return $true
@@ -653,31 +645,25 @@ function global:New-TuiDataTable {
         # Public methods
         RefreshData = {
             param($self)
-            Invoke-WithErrorHandling -Component "$($self.Name).RefreshData" -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).RefreshData" -Context "RefreshData" -AdditionalData @{ ComponentName = $self.Name } -ScriptBlock {
                 & $self.ProcessData -self $self
                 Request-TuiRefresh
-            } -Context @{ Component = $self.Name } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "DataTable RefreshData error: $($Exception.Message)" -Data $Exception.Context
             }
         }
         
         SetFilter = {
             param($self, $FilterText, $FilterColumn)
-            Invoke-WithErrorHandling -Component "$($self.Name).SetFilter" -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).SetFilter" -Context "SetFilter" -AdditionalData @{ ComponentName = $self.Name; FilterText = $FilterText; FilterColumn = $FilterColumn } -ScriptBlock {
                 $self.FilterText = $FilterText
                 $self.FilterColumn = $FilterColumn
                 & $self.ProcessData -self $self
                 Request-TuiRefresh
-            } -Context @{ Component = $self.Name; FilterText = $FilterText; FilterColumn = $FilterColumn } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "DataTable SetFilter error: $($Exception.Message)" -Data $Exception.Context
             }
         }
         
         ExportData = {
             param($self, $Format = "CSV", $FilePath)
-            Invoke-WithErrorHandling -Component "$($self.Name).ExportData" -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).ExportData" -Context "ExportData" -AdditionalData @{ ComponentName = $self.Name; Format = $Format; FilePath = $FilePath } -ScriptBlock {
                 $exportData = if ($self.FilterText) { $self.ProcessedData } else { $self.Data }
                 
                 switch ($Format.ToUpper()) {
@@ -709,9 +695,6 @@ function global:New-TuiDataTable {
                         $html | Set-Content -Path $FilePath
                     }
                 }
-            } -Context @{ Component = $self.Name; Format = $Format; FilePath = $FilePath } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "DataTable ExportData error: $($Exception.Message)" -Data $Exception.Context
             }
         }
     }
@@ -951,7 +934,7 @@ function global:New-TuiTreeView {
                     }
                     ([ConsoleKey]::Enter) {
                         if ($self.OnNodeSelect -and $self.SelectedNode) {
-                            Invoke-WithErrorHandling -Component "$($self.Name).OnNodeSelect" -ScriptBlock {
+                            Invoke-WithErrorHandling -Component "$($self.Name).OnNodeSelect" -Context "OnNodeSelect" -AdditionalData @{ ComponentName = $self.Name; SelectedNode = $self.SelectedNode.Name } -ScriptBlock {
                                 # Build path
                                 $path = @()
                                 $current = $self.SelectedNode
@@ -961,9 +944,6 @@ function global:New-TuiTreeView {
                                 }
                                 
                                 & $self.OnNodeSelect -Node $self.SelectedNode -Path $path
-                            } -Context @{ Component = $self.Name; SelectedNode = $self.SelectedNode.Name } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "TreeView OnNodeSelect error: $($Exception.Message)" -Data $Exception.Context
                             }
                         }
                         return $true
@@ -1022,22 +1002,19 @@ function global:New-TuiTreeView {
         # Public methods
         AddNode = {
             param($self, $ParentNode, $NewNode)
-            Invoke-WithErrorHandling -Component "$($self.Name).AddNode" -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).AddNode" -Context "AddNode" -AdditionalData @{ ComponentName = $self.Name; ParentNode = $ParentNode.Name; NewNode = $NewNode.Name } -ScriptBlock {
                 if (-not $ParentNode.Children) {
                     $ParentNode.Children = @()
                 }
                 $ParentNode.Children += $NewNode
                 $NewNode.Parent = $ParentNode
                 Request-TuiRefresh
-            } -Context @{ Component = $self.Name; ParentNode = $ParentNode.Name; NewNode = $NewNode.Name } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "TreeView AddNode error: $($Exception.Message)" -Data $Exception.Context
             }
         }
         
         RemoveNode = {
             param($self, $Node)
-            Invoke-WithErrorHandling -Component "$($self.Name).RemoveNode" -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).RemoveNode" -Context "RemoveNode" -AdditionalData @{ ComponentName = $self.Name; Node = $Node.Name } -ScriptBlock {
                 if ($Node.Parent) {
                     $Node.Parent.Children = @($Node.Parent.Children | Where-Object { $_ -ne $Node })
                     if ($self.SelectedNode -eq $Node) {
@@ -1045,15 +1022,12 @@ function global:New-TuiTreeView {
                     }
                     Request-TuiRefresh
                 }
-            } -Context @{ Component = $self.Name; Node = $Node.Name } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "TreeView RemoveNode error: $($Exception.Message)" -Data $Exception.Context
             }
         }
         
         FindNode = {
             param($self, $Predicate)
-            Invoke-WithErrorHandling -Component "$($self.Name).FindNode" -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).FindNode" -Context "FindNode" -AdditionalData @{ ComponentName = $self.Name } -ScriptBlock {
                 $find = {
                     param($Node)
                     if (& $Predicate $Node) { return $Node }
@@ -1065,10 +1039,6 @@ function global:New-TuiTreeView {
                 }
                 
                 return & $find $self.RootNode
-            } -Context @{ Component = $self.Name } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "TreeView FindNode error: $($Exception.Message)" -Data $Exception.Context
-                return $null
             }
         }
     }

@@ -10,13 +10,10 @@ function global:Initialize-EventSystem {
     .SYNOPSIS
     Initializes the event system for the application
     #>
-    Invoke-WithErrorHandling -Component "EventSystem.Initialize" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.Initialize" -Context "Initializing event system" -ScriptBlock {
         $script:EventHandlers = @{}
         $script:EventHistory = @()
         Write-Verbose "Event system initialized"
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to initialize Event System: $($Exception.Message)" -Data $Exception.Context
     }
 }
 
@@ -38,7 +35,7 @@ function global:Publish-Event {
         [Parameter()]
         [hashtable]$Data = @{}
     )
-    Invoke-WithErrorHandling -Component "EventSystem.PublishEvent" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.PublishEvent" -Context "Publishing event '$EventName'" -ScriptBlock {
         # Record event in history
         $eventRecord = @{
             EventName = $EventName
@@ -69,10 +66,7 @@ function global:Publish-Event {
         }
         
         Write-Verbose "Published event: $EventName"
-    } -Context @{ EventName = $EventName; EventData = $Data } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to publish event '$($Exception.Context.EventName)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -AdditionalData @{ EventName = $EventName; EventData = $Data }
 }
 
 function global:Subscribe-Event {
@@ -105,7 +99,7 @@ function global:Subscribe-Event {
         [Parameter()]
         [string]$Source = $null
     )
-    Invoke-WithErrorHandling -Component "EventSystem.SubscribeEvent" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.SubscribeEvent" -Context "Subscribing to event '$EventName'" -ScriptBlock {
         if (-not $script:EventHandlers.ContainsKey($EventName)) {
             $script:EventHandlers[$EventName] = @()
         }
@@ -123,11 +117,7 @@ function global:Subscribe-Event {
         
         # Only return handler ID, don't print it
         return $HandlerId
-    } -Context @{ EventName = $EventName; HandlerId = $HandlerId; Source = $Source } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to subscribe to event '$($Exception.Context.EventName)': $($Exception.Message)" -Data $Exception.Context
-        return $null # Return null on error
-    }
+    } -AdditionalData @{ EventName = $EventName; HandlerId = $HandlerId; Source = $Source }
 }
 
 function global:Unsubscribe-Event {
@@ -148,7 +138,7 @@ function global:Unsubscribe-Event {
         [Parameter(Mandatory = $true)]
         [string]$HandlerId
     )
-    Invoke-WithErrorHandling -Component "EventSystem.UnsubscribeEvent" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.UnsubscribeEvent" -Context "Unsubscribing from event '$EventName' (Handler: $HandlerId)" -ScriptBlock {
         if ($EventName) {
             # Fast path when event name is known
             if ($script:EventHandlers.ContainsKey($EventName)) {
@@ -183,10 +173,7 @@ function global:Unsubscribe-Event {
                 Write-Warning "Handler ID not found: $HandlerId"
             }
         }
-    } -Context @{ EventName = $EventName; HandlerId = $HandlerId } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to unsubscribe from event '$($Exception.Context.EventName)' with ID '$($Exception.Context.HandlerId)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -AdditionalData @{ EventName = $EventName; HandlerId = $HandlerId }
 }
 
 function global:Get-EventHandlers {
@@ -201,7 +188,7 @@ function global:Get-EventHandlers {
         [Parameter()]
         [string]$EventName
     )
-    Invoke-WithErrorHandling -Component "EventSystem.GetEventHandlers" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.GetEventHandlers" -Context "Getting event handlers for '$EventName'" -ScriptBlock {
         if ($EventName) {
             if ($script:EventHandlers.ContainsKey($EventName)) {
                 return $script:EventHandlers[$EventName]
@@ -211,11 +198,7 @@ function global:Get-EventHandlers {
         } else {
             return $script:EventHandlers
         }
-    } -Context @{ EventName = $EventName } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to get event handlers for '$($Exception.Context.EventName)': $($Exception.Message)" -Data $Exception.Context
-        return @{} # Return empty on error
-    }
+    } -AdditionalData @{ EventName = $EventName }
 }
 
 function global:Clear-EventHandlers {
@@ -230,7 +213,7 @@ function global:Clear-EventHandlers {
         [Parameter()]
         [string]$EventName
     )
-    Invoke-WithErrorHandling -Component "EventSystem.ClearEventHandlers" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.ClearEventHandlers" -Context "Clearing event handlers for '$EventName'" -ScriptBlock {
         if ($EventName) {
             if ($script:EventHandlers.ContainsKey($EventName)) {
                 $script:EventHandlers.Remove($EventName)
@@ -240,10 +223,7 @@ function global:Clear-EventHandlers {
             $script:EventHandlers = @{}
             Write-Verbose "Cleared all event handlers"
         }
-    } -Context @{ EventName = $EventName } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to clear event handlers for '$($Exception.Context.EventName)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -AdditionalData @{ EventName = $EventName }
 }
 
 function global:Get-EventHistory {
@@ -264,7 +244,7 @@ function global:Get-EventHistory {
         [Parameter()]
         [int]$Last = 0
     )
-    Invoke-WithErrorHandling -Component "EventSystem.GetEventHistory" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.GetEventHistory" -Context "Getting event history for '$EventName'" -ScriptBlock {
         $history = $script:EventHistory
         
         if ($EventName) {
@@ -276,11 +256,7 @@ function global:Get-EventHistory {
         }
         
         return $history
-    } -Context @{ EventName = $EventName; LastCount = $Last } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to get event history for '$($Exception.Context.EventName)': $($Exception.Message)" -Data $Exception.Context
-        return @() # Return empty array on error
-    }
+    } -AdditionalData @{ EventName = $EventName; LastCount = $Last }
 }
 
 function global:Remove-ComponentEventHandlers {
@@ -295,7 +271,7 @@ function global:Remove-ComponentEventHandlers {
         [Parameter(Mandatory = $true)]
         [string]$ComponentId
     )
-    Invoke-WithErrorHandling -Component "EventSystem.RemoveComponentEventHandlers" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "EventSystem.RemoveComponentEventHandlers" -Context "Removing event handlers for component '$ComponentId'" -ScriptBlock {
         $removedCount = 0
         
         # Iterate through all events and remove handlers with matching component ID
@@ -320,10 +296,7 @@ function global:Remove-ComponentEventHandlers {
         }
         
         Write-Verbose "Removed $removedCount event handlers for component: $ComponentId"
-    } -Context @{ ComponentId = $ComponentId } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to remove event handlers for component '$($Exception.Context.ComponentId)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -AdditionalData @{ ComponentId = $ComponentId }
 }
 
 # Export functions

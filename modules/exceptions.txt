@@ -231,10 +231,16 @@ function Invoke-WithErrorHandling {
 
         # 5. Create a new, rich, strongly-typed exception and throw it.
         # This allows upstream code to catch '[Helios.HeliosException]' specifically.
+        # Convert PSCustomObject to Hashtable for the constructor
+        $contextHashtable = @{}
+        $detailedError.PSObject.Properties | ForEach-Object {
+            $contextHashtable[$_.Name] = $_.Value
+        }
+        
         $heliosException = New-Object Helios.HeliosException(
             $originalErrorRecord.Exception.Message,
             $finalComponent,
-            $detailedError,
+            $contextHashtable,
             $originalErrorRecord.Exception
         )
         

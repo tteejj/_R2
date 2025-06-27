@@ -101,11 +101,8 @@ function global:New-TuiButton {
             try {
                 if ($Key.Key -in @([ConsoleKey]::Enter, [ConsoleKey]::Spacebar)) {
                     if ($self.OnClick) {
-                        Invoke-WithErrorHandling -Component "$($self.Name).OnClick" -ScriptBlock {
+                        Invoke-WithErrorHandling -Component "$($self.Name).OnClick" -Context "OnClick" -AdditionalData @{ Component = $self.Name; Key = $Key } -ScriptBlock {
                             & $self.OnClick
-                        } -Context @{ Component = $self.Name; Key = $Key } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "Button OnClick error: $($Exception.Message)" -Data $Exception.Context
                         }
                     }
                     Request-TuiRefresh
@@ -263,11 +260,8 @@ function global:New-TuiTextBox {
                     $self.CursorPosition = $cursorPos
                     
                     if ($self.OnChange) { 
-                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
+                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -Context "OnChange" -AdditionalData @{ Component = $self.Name; NewValue = $text } -ScriptBlock {
                             & $self.OnChange -NewValue $text
-                        } -Context @{ Component = $self.Name; NewValue = $text } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "TextBox OnChange error: $($Exception.Message)" -Data $Exception.Context
                         }
                     }
                     Request-TuiRefresh
@@ -327,11 +321,8 @@ function global:New-TuiCheckBox {
                     $self.Checked = -not $self.Checked
                     
                     if ($self.OnChange) { 
-                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
+                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -Context "OnChange" -AdditionalData @{ Component = $self.Name; NewValue = $self.Checked } -ScriptBlock {
                             & $self.OnChange -NewValue $self.Checked 
-                        } -Context @{ Component = $self.Name; NewValue = $self.Checked } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "CheckBox OnChange error: $($Exception.Message)" -Data $Exception.Context
                         }
                     }
                     Request-TuiRefresh
@@ -448,11 +439,8 @@ function global:New-TuiDropdown {
                                 $self.Value = $selected.Value
                                 
                                 if ($self.OnChange) { 
-                                    Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
+                                    Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -Context "OnChange" -AdditionalData @{ Component = $self.Name; NewValue = $selected.Value } -ScriptBlock {
                                         & $self.OnChange -NewValue $selected.Value 
-                                    } -Context @{ Component = $self.Name; NewValue = $selected.Value } -ErrorHandler {
-                                        param($Exception)
-                                        Write-Log -Level Error -Message "Dropdown OnChange error: $($Exception.Message)" -Data $Exception.Context
                                     }
                                 }
                             }
@@ -798,11 +786,8 @@ function global:New-TuiTextArea {
                 $self.Text = $lines -join "`n"
                 
                 if ($self.OnChange) { 
-                    Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
+                    Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -Context "OnChange" -AdditionalData @{ Component = $self.Name; NewValue = $self.Text } -ScriptBlock {
                         & $self.OnChange -NewValue $self.Text 
-                    } -Context @{ Component = $self.Name; NewValue = $self.Text } -ErrorHandler {
-                        param($Exception)
-                        Write-Log -Level Error -Message "TextArea OnChange error: $($Exception.Message)" -Data $Exception.Context
                     }
                 }
                 Request-TuiRefresh
@@ -894,11 +879,8 @@ function global:New-TuiDatePicker {
                 if ($handled) {
                     $self.Value = $date
                     if ($self.OnChange) { 
-                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
+                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -Context "OnChange" -AdditionalData @{ Component = $self.Name; NewValue = $date } -ScriptBlock {
                             & $self.OnChange -NewValue $date 
-                        } -Context @{ Component = $self.Name; NewValue = $date } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "DatePicker OnChange error: $($Exception.Message)" -Data $Exception.Context
                         }
                     }
                     Request-TuiRefresh
@@ -996,11 +978,8 @@ function global:New-TuiTimePicker {
                     $self.Minute = $minute
                     
                     if ($self.OnChange) { 
-                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
+                        Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -Context "OnChange" -AdditionalData @{ Component = $self.Name; NewHour = $hour; NewMinute = $minute } -ScriptBlock {
                             & $self.OnChange -NewHour $hour -NewMinute $minute 
-                        } -Context @{ Component = $self.Name; NewHour = $hour; NewMinute = $minute } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "TimePicker OnChange error: $($Exception.Message)" -Data $Exception.Context
                         }
                     }
                     Request-TuiRefresh
@@ -1174,11 +1153,8 @@ function global:New-TuiTable {
                     }
                     ([ConsoleKey]::Enter) { 
                         if ($self.OnRowSelect) { 
-                            Invoke-WithErrorHandling -Component "$($self.Name).OnRowSelect" -ScriptBlock {
+                            Invoke-WithErrorHandling -Component "$($self.Name).OnRowSelect" -Context "OnRowSelect" -AdditionalData @{ Component = $self.Name; SelectedRow = $self.SelectedRow } -ScriptBlock {
                                 & $self.OnRowSelect -Row $self.Rows[$self.SelectedRow] -Index $self.SelectedRow 
-                            } -Context @{ Component = $self.Name; SelectedRow = $self.SelectedRow } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "Table OnRowSelect error: $($Exception.Message)" -Data $Exception.Context
                             }
                         } 
                     }

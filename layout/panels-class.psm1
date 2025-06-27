@@ -2,11 +2,13 @@
 # Implements specialized panel types for the TUI layout system
 # AI: Implements Phase 1.2 of the class migration plan - layout components
 
+# Import base classes
+using module '..\components\ui-classes.psm1'
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Import base classes
-using module '..\components\ui-classes.psm1'
+
 
 # Import utilities for error handling
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force

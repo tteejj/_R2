@@ -120,16 +120,15 @@ function global:Get-ThemeColor {
         [ConsoleColor]$Default = [ConsoleColor]::Gray
     )
     # AI: This function is called frequently during render. The wrapper adds negligible overhead
-    # but ensures any unexpected state corruption is handled gracefully.
-    Invoke-WithErrorHandling -Component "ThemeManager.GetColor" -Context "Retrieving a theme color" -ScriptBlock {
+    #     but ensures any unexpected state corruption is handled gracefully.
+    try {
         if ($script:CurrentTheme -and $script:CurrentTheme.Colors.ContainsKey($ColorName)) {
             return $script:CurrentTheme.Colors[$ColorName]
         }
         return $Default
-    } -Context @{ ColorName = $ColorName } -ErrorHandler {
-        param($Exception)
-        # Log the error but return the default to prevent a visual crash.
-        Write-Log -Level Error -Message "Failed to get theme color '$($Exception.Context.ColorName)': $($Exception.Message)" -Data $Exception.Context
+    } catch {
+        # Failsafe for render-critical function.
+        Write-Log -Level Warning -Message "Error in Get-ThemeColor for '$ColorName'. Returning default. Error: $_"
         return $Default
     }
 }
@@ -141,10 +140,6 @@ function global:Get-TuiTheme {
     #>
     Invoke-WithErrorHandling -Component "ThemeManager.GetTheme" -Context "Retrieving the current theme object" -ScriptBlock {
         return $script:CurrentTheme
-    } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to get current TUI Theme: $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 
@@ -155,10 +150,6 @@ function global:Get-AvailableThemes {
     #>
     Invoke-WithErrorHandling -Component "ThemeManager.GetAvailableThemes" -Context "Retrieving all available theme names" -ScriptBlock {
         return $script:Themes.Keys | Sort-Object
-    } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to get available themes: $($Exception.Message)" -Data $Exception.Context
-        return @()
     }
 }
 
@@ -173,7 +164,7 @@ function global:New-TuiTheme {
         [string]$BaseTheme = "Modern",
         [hashtable]$Colors = @{}
     )
-    Invoke-WithErrorHandling -Component "ThemeManager.NewTheme" -Context "Creating a new theme" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "ThemeManager.NewTheme" -Context "Creating a new theme" -AdditionalData @{ ThemeName = $Name } -ScriptBlock {
         $newTheme = @{ Name = $Name; Colors = @{} }
         
         if ($script:Themes.ContainsKey($BaseTheme)) {
@@ -187,10 +178,6 @@ function global:New-TuiTheme {
         $script:Themes[$Name] = $newTheme
         Write-Log -Level Info -Message "Created new theme: $Name"
         return $newTheme
-    } -Context @{ ThemeName = $Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to create new TUI Theme '$($Exception.Context.ThemeName)': $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 
@@ -205,7 +192,7 @@ function global:Export-TuiTheme {
         [Parameter(Mandatory = $true)]
         [string]$Path
     )
-    Invoke-WithErrorHandling -Component "ThemeManager.ExportTheme" -Context "Exporting a theme to JSON" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "ThemeManager.ExportTheme" -Context "Exporting a theme to JSON" -AdditionalData @{ ThemeName = $ThemeName; FilePath = $Path } -ScriptBlock {
         if ($script:Themes.ContainsKey($ThemeName)) {
             $theme = $script:Themes[$ThemeName]
             $exportTheme = @{ Name = $theme.Name; Colors = @{} }
@@ -219,9 +206,6 @@ function global:Export-TuiTheme {
         } else {
             Write-Log -Level Warning -Message "Cannot export theme. Theme not found: $ThemeName"
         }
-    } -Context @{ ThemeName = $ThemeName; FilePath = $Path } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to export TUI Theme '$($Exception.Context.ThemeName)': $($Exception.Message)" -Data $Exception.Context
     }
 }
 
@@ -234,7 +218,7 @@ function global:Import-TuiTheme {
         [Parameter(Mandatory = $true)]
         [string]$Path
     )
-    Invoke-WithErrorHandling -Component "ThemeManager.ImportTheme" -Context "Importing a theme from JSON" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "ThemeManager.ImportTheme" -Context "Importing a theme from JSON" -AdditionalData @{ FilePath = $Path } -ScriptBlock {
         if (Test-Path $Path) {
             $importedTheme = Get-Content $Path -Raw | ConvertFrom-Json -AsHashtable
             $theme = @{ Name = $importedTheme.Name; Colors = @{} }
@@ -250,10 +234,6 @@ function global:Import-TuiTheme {
             Write-Log -Level Warning -Message "Cannot import theme. File not found: $Path"
             return $null
         }
-    } -Context @{ FilePath = $Path } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to import TUI Theme from '$($Exception.Context.FilePath)': $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 

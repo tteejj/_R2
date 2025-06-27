@@ -85,7 +85,7 @@ function global:Set-TuiTheme {
         [Parameter(Mandatory = $true)]
         [string]$ThemeName
     )
-    Invoke-WithErrorHandling -Component "ThemeManager.SetTheme" -Context "Setting active TUI theme" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "ThemeManager.SetTheme" -Context "Setting active TUI theme" -AdditionalData @{ ThemeName = $ThemeName } -ScriptBlock {
         if ($script:Themes.ContainsKey($ThemeName)) {
             $script:CurrentTheme = $script:Themes[$ThemeName]
             
@@ -105,9 +105,6 @@ function global:Set-TuiTheme {
         } else {
             Write-Log -Level Warning -Message "Theme not found: $ThemeName"
         }
-    } -Context @{ ThemeName = $ThemeName } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to set TUI Theme to '$($Exception.Context.ThemeName)': $($Exception.Message)" -Data $Exception.Context
     }
 }
 

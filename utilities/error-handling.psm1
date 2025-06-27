@@ -175,7 +175,30 @@ function Write-Log {
     
     # Add error details if provided
     if ($ErrorDetails.Count -gt 0) {
-        $logEntry += " | Details: " + ($ErrorDetails | ConvertTo-Json -Compress -Depth 3)
+        try {
+            # AI: Safely serialize error details to avoid issues with non-string keys or complex objects
+            $serializedDetails = $ErrorDetails | ConvertTo-Json -Compress -Depth 2 -ErrorAction Stop
+            $logEntry += " | Details: " + $serializedDetails
+        }
+        catch {
+            # AI: If serialization fails, create a simple string representation
+            $simpleDetails = @()
+            foreach ($key in $ErrorDetails.Keys) {
+                $value = $ErrorDetails[$key]
+                if ($null -eq $value) {
+                    $simpleDetails += "$key=null"
+                }
+                elseif ($value -is [string] -or $value -is [int] -or $value -is [bool] -or $value -is [datetime]) {
+                    $simpleDetails += "$key=$value"
+                }
+                else {
+                    # AI: Fixed string interpolation issue
+                    $typeName = try { $value.GetType().Name } catch { "Unknown" }
+                    $simpleDetails += "$key=[$typeName]"
+                }
+            }
+            $logEntry += " | Details: {" + ($simpleDetails -join "; ") + "}"
+        }
     }
     
     # Write to console with color coding

@@ -33,8 +33,8 @@ $script:ModulesToLoad = @(
     @{ Name = "dialog-system"; Path = "modules\dialog-system.psm1"; Required = $true },
 
     # Services
-    @{ Name = "navigation"; Path = "services\navigation.psm1"; Required = $true },
-    @{ Name = "keybindings"; Path = "services\keybindings.psm1"; Required = $true },
+    @{ Name = "navigation-service"; Path = "services\navigation-service.psm1"; Required = $true },
+    @{ Name = "keybinding-service"; Path = "services\keybinding-service.psm1"; Required = $true },
 
     # Layout system
     @{ Name = "layout-panels"; Path = "layout\panels.psm1"; Required = $true },
@@ -51,8 +51,12 @@ $script:ModulesToLoad = @(
 # Screen modules will be loaded dynamically by the framework.
 $script:ScreenModules = @(
     "dashboard-screen-helios",
-    "task-screen",
-    "simple-test-screen" # AI: Added for consistency with navigation routes.
+    "task-screen",              # AI: Fixed - this contains Get-TaskManagementScreen
+    "task-dialog-screen", 
+    "project-list-screen",
+    "reports-screen",
+    "settings-screen",
+    "simple-test-screen"        # AI: Added for consistency with navigation routes.
 )
 
 function Initialize-PMCModules {
@@ -146,7 +150,12 @@ function Start-PMCTerminal {
         $loadedModules = Initialize-PMCModules -Silent:$Silent
         Write-Log -Level Info -Message "Core modules loaded: $($loadedModules -join ', ')"
         
-        # --- 2. Initialize Core Systems (in dependency order) ---
+        # --- 2. Load UI Screens (before services that depend on them) ---
+        # AI: Moved screen loading before service initialization so screen functions are available
+        $loadedScreens = Initialize-PMCScreens -Silent:$Silent
+        Write-Log -Level Info -Message "Screen modules loaded: $($loadedScreens -join ', ')"
+        
+        # --- 3. Initialize Core Systems (in dependency order) ---
         # AI: The service initialization sequence is now explicit and ordered by dependency.
         Initialize-EventSystem
         Initialize-ThemeManager
@@ -155,25 +164,23 @@ function Start-PMCTerminal {
         Initialize-FocusManager
         Initialize-DialogSystem
         
-        # --- 3. Initialize and Assemble Services ---
+        # --- 4. Initialize and Assemble Services ---
         $services = @{
             DataManager = $dataManagerService
-            Navigation  = Initialize-NavigationService
-            Keybindings = Initialize-KeybindingService
         }
+        
+        # AI: Create class-based services (screens are now loaded)
+        if (-not (Get-Module "navigation-service" -ListAvailable)) {
+            Write-Log -Level Warning -Message "Navigation service module not loaded via normal module loading process"
+        }
+        $services.Navigation = Initialize-NavigationService $services
+        $services.Keybindings = Initialize-KeybindingService -EnableChords $false
         $global:Services = $services
         Write-Log -Level Info -Message "All services initialized and assembled."
         
-        # --- 4. Register Navigation Routes ---
-        # AI: Route registration now happens after the Navigation service is fully initialized.
-        & $services.Navigation.RegisterRoute -self $services.Navigation -Path "/dashboard" -ScreenFactory { Get-DashboardScreen -Services $services }
-        & $services.Navigation.RegisterRoute -self $services.Navigation -Path "/tasks" -ScreenFactory { Get-TaskManagementScreen -Services $services }
-        & $services.Navigation.RegisterRoute -self $services.Navigation -Path "/simple-test" -ScreenFactory { Get-SimpleTestScreen -Services $services }
-        Write-Log -Level Info -Message "Navigation routes registered."
-        
-        # --- 5. Load UI Screens ---
-        $loadedScreens = Initialize-PMCScreens -Silent:$Silent
-        Write-Log -Level Info -Message "Screen modules loaded: $($loadedScreens -join ', ')"
+        # --- 5. Register Navigation Routes ---
+        # AI: Routes are now registered automatically in the class constructor
+        Write-Log -Level Info -Message "Navigation routes registered automatically."
         
         # --- 6. Initialize TUI Engine and Navigate ---
         if (-not $Silent) { Write-Host "`nStarting TUI..." -ForegroundColor Green }
@@ -187,12 +194,12 @@ function Start-PMCTerminal {
             "/dashboard"
         }
         
-        if (-not (& $services.Navigation.IsValidRoute -self $services.Navigation -Path $startPath)) {
+        if (-not $services.Navigation.IsValidRoute($startPath)) {
             Write-Log -Level Warning -Message "Startup path '$startPath' is not valid. Defaulting to /dashboard."
             $startPath = "/dashboard"
         }
         
-        & $services.Navigation.GoTo -self $services.Navigation -Path $startPath -Services $services
+        [void]$services.Navigation.GoTo($startPath)
         
         # --- 7. Start the Main Loop ---
         Start-TuiLoop

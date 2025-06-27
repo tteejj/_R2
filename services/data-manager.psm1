@@ -2,11 +2,13 @@
 # Manages global data state and provides CRUD operations
 # AI: Implements the single source of truth for application data ($global:Data)
 
+using module '..\models.psm1'
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # Import dependencies
-using module '..\models.psm1'
+
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force
 Import-Module -Name "$PSScriptRoot\..\utilities\event-system.psm1" -Force
 

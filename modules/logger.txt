@@ -113,7 +113,7 @@ function Initialize-Logger {
     param(
         [string]$LogDirectory = (Join-Path $env:TEMP "PMCTerminal"),
         [string]$LogFileName = "pmc_terminal_{0:yyyy-MM-dd}.log" -f (Get-Date),
-        [ValidateSet("Debug", "Verbose", "Info", "Warning", "Error", "Trace")]
+        [ValidateSet("Debug", "Verbose", "Info", "Warning", "Error", "Fatal", "Trace")]
         [string]$Level = "Debug"
     )
 
@@ -153,7 +153,7 @@ function Initialize-Logger {
 function Write-Log {
     [CmdletBinding()]
     param(
-        [ValidateSet("Debug", "Verbose", "Info", "Warning", "Error", "Trace")]
+        [ValidateSet("Debug", "Verbose", "Info", "Warning", "Error", "Fatal", "Trace")]
         [string]$Level = "Info",
         [Parameter(Mandatory)]
         [string]$Message,
@@ -170,6 +170,7 @@ function Write-Log {
         Info    = 2
         Warning = 3
         Error   = 4
+        Fatal   = 5
     }
 
     if (-not $Force -and $levelPriority[$Level] -lt $levelPriority[$script:LogLevel]) { return }
@@ -249,8 +250,8 @@ function Write-Log {
             }
         }
 
-        if ($Level -in @('Error', 'Warning')) {
-            $color = if ($Level -eq 'Error') { 'Red' } else { 'Yellow' }
+        if ($Level -in @('Error', 'Fatal', 'Warning')) {
+            $color = if ($Level -in @('Error', 'Fatal')) { 'Red' } else { 'Yellow' }
             Write-Host $logEntry -ForegroundColor $color
         }
 
@@ -433,7 +434,7 @@ function Get-CallTrace {
 }
 
 function Clear-LogQueue {
-    [CmdletBinding()]
+    param()
     try {
         $script:LogQueue.Clear()
         Write-Log -Level Info -Message "In-memory log queue cleared"
@@ -446,7 +447,7 @@ function Set-LogLevel {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet("Debug", "Verbose", "Info", "Warning", "Error", "Trace")]
+        [ValidateSet("Debug", "Verbose", "Info", "Warning", "Error", "Fatal", "Trace")]
         [string]$Level
     )
     try {
@@ -459,26 +460,24 @@ function Set-LogLevel {
 }
 
 function Enable-CallTracing {
-    [CmdletBinding()]
+    param()
     $script:TraceAllCalls = $true
     Write-Log -Level Info -Message "Call tracing enabled" -Force
 }
 
 function Disable-CallTracing {
-    [CmdletBinding()]
+    param()
     $script:TraceAllCalls = $false
     Write-Log -Level Info -Message "Call tracing disabled" -Force
 }
 
 function Get-LogPath {
-    [CmdletBinding()]
+    param()
     return $script:LogPath
 }
 
 function Get-LogStatistics {
-    [CmdletBinding()]
-    # AI: Removed incorrect parameter block that was copied from Get-LogEntries.
-    # This function takes no parameters.
+    param()
     try {
         $stats = [PSCustomObject]@{
             TotalEntries       = $script:LogQueue.Count

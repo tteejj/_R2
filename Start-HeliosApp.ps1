@@ -44,7 +44,10 @@ try {
     
     # Screens
     Import-Module "$scriptRoot\screens\dashboard-screen-helios.psm1" -Force
-    Import-Module "$scriptRoot\screens\task-screen.psm1" -Force -ErrorAction SilentlyContinue
+    Import-Module "$scriptRoot\screens\task-list-screen.psm1" -Force
+    Import-Module "$scriptRoot\screens\project-list-screen.psm1" -Force
+    Import-Module "$scriptRoot\screens\settings-screen.psm1" -Force
+    Import-Module "$scriptRoot\screens\reports-screen.psm1" -Force
     
     Write-Host "Modules loaded successfully!" -ForegroundColor Green
     Write-Host ""

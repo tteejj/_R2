@@ -1,8 +1,6 @@
 # Simple Test Screen - Basic test screen for development and debugging
 # Provides a minimal screen implementation for testing the TUI framework
 
-using module '..\modules\models.psm1'
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -47,21 +45,19 @@ function Get-SimpleTestScreen {
                     }
                     
                     # Add test content
-                    $welcomeLabel = New-TuiTextBlock -Props @{
+                    $welcomeLabel = New-TuiLabel -Props @{
                         Text = "This is a simple test screen for verifying the TUI framework."
                         Width = "100%"
                     }
                     
-                    $instructionLabel = New-TuiTextBlock -Props @{
+                    $instructionLabel = New-TuiLabel -Props @{
                         Text = "Press ESC to return to the main menu."
                         Width = "100%"
-                        Margin = @{ Top = 2 }
                     }
                     
-                    $statusLabel = New-TuiTextBlock -Props @{
+                    $statusLabel = New-TuiLabel -Props @{
                         Text = "Screen loaded successfully!"
                         Width = "100%"
-                        Margin = @{ Top = 1 }
                     }
                     
                     & $rootPanel.AddChild -self $rootPanel -Child $welcomeLabel

@@ -179,10 +179,7 @@ function global:New-TuiCalendarPicker {
                         if ($self.OnSelect) {
                             Invoke-WithErrorHandling -Component "$($self.Name).OnSelect" -ScriptBlock {
                                 & $self.OnSelect -Date $date
-                            } -Context @{ Component = $self.Name; SelectedDate = $date } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "CalendarPicker OnSelect error: $($Exception.Message)" -Data $Exception.Context
-                            }
+                            } -AdditionalData @{ Component = $self.Name; SelectedDate = $date }
                         }
                     }
                     default {
@@ -195,10 +192,7 @@ function global:New-TuiCalendarPicker {
                     if ($self.OnChange) {
                         Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
                             & $self.OnChange -NewValue $date
-                        } -Context @{ Component = $self.Name; NewValue = $date } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "CalendarPicker OnChange error: $($Exception.Message)" -Data $Exception.Context
-                        }
+                        } -AdditionalData @{ Component = $self.Name; NewValue = $date }
                     }
                     Request-TuiRefresh
                 }
@@ -422,10 +416,7 @@ function global:New-TuiSearchableDropdown {
                             if ($self.OnChange) {
                                 Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
                                     & $self.OnChange -NewValue $selected.Value -Option $selected
-                                } -Context @{ Component = $self.Name; NewValue = $selected.Value; Option = $selected } -ErrorHandler {
-                                    param($Exception)
-                                    Write-Log -Level Error -Message "SearchableDropdown OnChange error: $($Exception.Message)" -Data $Exception.Context
-                                }
+                                } -AdditionalData @{ Component = $self.Name; NewValue = $selected.Value; Option = $selected }
                             }
                             $self.Value = $selected.Value
                             $self.IsOpen = $false
@@ -608,10 +599,7 @@ function global:New-TuiMultiSelect {
                         if ($self.OnChange) {
                             Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
                                 & $self.OnChange -SelectedValues $self.SelectedValues
-                            } -Context @{ Component = $self.Name; SelectedValues = $self.SelectedValues } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "MultiSelect OnChange error: $($Exception.Message)" -Data $Exception.Context
-                            }
+                            } -AdditionalData @{ Component = $self.Name; SelectedValues = $self.SelectedValues }
                         }
                         Request-TuiRefresh
                         return $true
@@ -620,10 +608,7 @@ function global:New-TuiMultiSelect {
                         if ($self.OnSubmit) {
                             Invoke-WithErrorHandling -Component "$($self.Name).OnSubmit" -ScriptBlock {
                                 & $self.OnSubmit -SelectedValues $self.SelectedValues
-                            } -Context @{ Component = $self.Name; SelectedValues = $self.SelectedValues } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "MultiSelect OnSubmit error: $($Exception.Message)" -Data $Exception.Context
-                            }
+                            } -AdditionalData @{ Component = $self.Name; SelectedValues = $self.SelectedValues }
                         }
                         return $true
                     }
@@ -728,10 +713,7 @@ function global:New-TuiNumberInput {
                 if ($this.OnChange) {
                     Invoke-WithErrorHandling -Component "$($this.Name).OnChange" -ScriptBlock {
                         & $this.OnChange -NewValue $newValue
-                    } -Context @{ Component = $this.Name; NewValue = $newValue } -ErrorHandler {
-                        param($Exception)
-                        Write-Log -Level Error -Message "NumberInput OnChange error: $($Exception.Message)" -Data $Exception.Context
-                    }
+                    } -AdditionalData @{ Component = $this.Name; NewValue = $newValue }
                 }
                 
                 return $true
@@ -754,10 +736,7 @@ function global:New-TuiNumberInput {
                         if ($self.OnChange) {
                             Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
                                 & $self.OnChange -NewValue $self.Value
-                            } -Context @{ Component = $self.Name; NewValue = $self.Value } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "NumberInput OnChange error: $($Exception.Message)" -Data $Exception.Context
-                            }
+                            } -AdditionalData @{ Component = $self.Name; NewValue = $self.Value }
                         }
                         Request-TuiRefresh
                         return $true
@@ -769,10 +748,7 @@ function global:New-TuiNumberInput {
                         if ($self.OnChange) {
                             Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
                                 & $self.OnChange -NewValue $self.Value
-                            } -Context @{ Component = $self.Name; NewValue = $self.Value } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "NumberInput OnChange error: $($Exception.Message)" -Data $Exception.Context
-                            }
+                            } -AdditionalData @{ Component = $self.Name; NewValue = $self.Value }
                         }
                         Request-TuiRefresh
                         return $true
@@ -937,10 +913,7 @@ function global:New-TuiSlider {
                     if ($self.OnChange) {
                         Invoke-WithErrorHandling -Component "$($self.Name).OnChange" -ScriptBlock {
                             & $self.OnChange -NewValue $self.Value
-                        } -Context @{ Component = $self.Name; NewValue = $self.Value } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "Slider OnChange error: $($Exception.Message)" -Data $Exception.Context
-                        }
+                        } -AdditionalData @{ Component = $self.Name; NewValue = $self.Value }
                     }
                     Request-TuiRefresh
                 }

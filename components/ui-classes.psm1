@@ -2,11 +2,13 @@
 # Provides the foundational class hierarchy for all UI components
 # AI: Implements Phase 1.1 of the class migration plan - base UI element hierarchy
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
 
 # Import error handling utilities
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
 
 # Base UI Element - foundation for all visual components
 class UIElement {

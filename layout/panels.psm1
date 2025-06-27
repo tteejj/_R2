@@ -1,6 +1,41 @@
 # FILE: layout/panels.psm1 - FIXED VERSION
 # PURPOSE: Provides specialized layout panels with resolved parameter binding issues
 
+# AI: Helper function to resolve percentage dimensions to actual pixel values
+function Resolve-Dimension {
+    param(
+        $Dimension,
+        [int]$ParentSize
+    )
+    
+    if ($null -eq $Dimension) { return 0 }
+    
+    # If it's already a number, return it
+    if ($Dimension -is [int] -or $Dimension -is [double]) {
+        return [int]$Dimension
+    }
+    
+    # If it's a string with percentage
+    if ($Dimension -is [string]) {
+        # Handle corrupted values like "100%1"
+        $cleanDimension = $Dimension -replace '[^0-9%]', ''
+        
+        if ($cleanDimension -match '^(\d+)%$') {
+            $percentage = [int]$matches[1]
+            return [int]([Math]::Floor($ParentSize * $percentage / 100))
+        }
+        
+        # Try to parse as integer
+        $intValue = 0
+        if ([int]::TryParse($Dimension, [ref]$intValue)) {
+            return $intValue
+        }
+    }
+    
+    # Default fallback
+    return 0
+}
+
 function New-BasePanel {
     param([hashtable]$Props)
     
@@ -118,11 +153,15 @@ function New-BasePanel {
             Invoke-WithErrorHandling -Component "$($self.Name).GetContentBounds" -Context "Calculating content bounds" -ScriptBlock {
                 $borderOffset = if ($self.ShowBorder) { 1 } else { 0 }
                 
+                # AI: Resolve percentage values for width and height
+                $resolvedWidth = Resolve-Dimension -Dimension $self.Width -ParentSize $global:TuiState.BufferWidth
+                $resolvedHeight = Resolve-Dimension -Dimension $self.Height -ParentSize $global:TuiState.BufferHeight
+                
                 return @{
                     X = $self.X + $self.Padding + $borderOffset + $self.Margin
                     Y = $self.Y + $self.Padding + $borderOffset + $self.Margin
-                    Width = $self.Width - (2 * ($self.Padding + $borderOffset + $self.Margin))
-                    Height = $self.Height - (2 * ($self.Padding + $borderOffset + $self.Margin))
+                    Width = $resolvedWidth - (2 * ($self.Padding + $borderOffset + $self.Margin))
+                    Height = $resolvedHeight - (2 * ($self.Padding + $borderOffset + $self.Margin))
                 }
             }
         }
@@ -167,12 +206,25 @@ function global:New-TuiStackPanel {
             $visibleChildren = $self.Children | Where-Object { $_.Visible }
             
             foreach ($child in $visibleChildren) {
+                # AI: Resolve percentage dimensions for child sizes
+                $childWidth = if ($self.Orientation -eq 'Horizontal') { 
+                    Resolve-Dimension -Dimension $child.Width -ParentSize $bounds.Width 
+                } else { 
+                    $bounds.Width 
+                }
+                
+                $childHeight = if ($self.Orientation -eq 'Vertical') { 
+                    Resolve-Dimension -Dimension $child.Height -ParentSize $bounds.Height 
+                } else { 
+                    $bounds.Height 
+                }
+                
                 $childLayout = @{
                     Component = $child
                     X = $currentX
                     Y = $currentY
-                    Width = if ($self.Orientation -eq 'Horizontal') { $child.Width } else { $bounds.Width }
-                    Height = if ($self.Orientation -eq 'Vertical') { $child.Height } else { $bounds.Height }
+                    Width = $childWidth
+                    Height = $childHeight
                 }
                 
                 # Update child position
@@ -183,9 +235,9 @@ function global:New-TuiStackPanel {
                 
                 # Move to next position
                 if ($self.Orientation -eq 'Vertical') {
-                    $currentY += $childLayout.Height + $self.Spacing
+                    $currentY += $childHeight + $self.Spacing
                 } else {
-                    $currentX += $childLayout.Width + $self.Spacing
+                    $currentX += $childWidth + $self.Spacing
                 }
             }
             
@@ -225,8 +277,12 @@ function global:New-TuiStackPanel {
                     [ConsoleColor]::Gray
                 }
                 
+                # AI: Resolve percentage dimensions before rendering
+                $resolvedWidth = Resolve-Dimension -Dimension $self.Width -ParentSize $global:TuiState.BufferWidth
+                $resolvedHeight = Resolve-Dimension -Dimension $self.Height -ParentSize $global:TuiState.BufferHeight
+                
                 if (Get-Command -Name "Write-BufferBox" -ErrorAction SilentlyContinue) {
-                    Write-BufferBox -X $self.X -Y $self.Y -Width $self.Width -Height $self.Height `
+                    Write-BufferBox -X $self.X -Y $self.Y -Width $resolvedWidth -Height $resolvedHeight `
                         -BorderColor $borderColor -BackgroundColor $bgColor `
                         -BorderStyle $self.BorderStyle -Title $self.Title
                 }
@@ -388,8 +444,12 @@ function global:New-TuiGridPanel {
                     [ConsoleColor]::Gray
                 }
                 
+                # AI: Resolve percentage dimensions before rendering
+                $resolvedWidth = Resolve-Dimension -Dimension $self.Width -ParentSize $global:TuiState.BufferWidth
+                $resolvedHeight = Resolve-Dimension -Dimension $self.Height -ParentSize $global:TuiState.BufferHeight
+                
                 if (Get-Command -Name "Write-BufferBox" -ErrorAction SilentlyContinue) {
-                    Write-BufferBox -X $self.X -Y $self.Y -Width $self.Width -Height $self.Height `
+                    Write-BufferBox -X $self.X -Y $self.Y -Width $resolvedWidth -Height $resolvedHeight `
                         -BorderColor $borderColor -BackgroundColor $bgColor `
                         -BorderStyle $self.BorderStyle -Title $self.Title
                 }

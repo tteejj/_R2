@@ -45,6 +45,36 @@ function global:New-TuiDataTable {
         OnRowSelect = $Props.OnRowSelect
         OnSelectionChange = $Props.OnSelectionChange
         
+        # AI: Add GetContentBounds method to resolve percentage dimensions
+        GetContentBounds = {
+            param($self)
+            Invoke-WithErrorHandling -Component "$($self.Name).GetContentBounds" -Context "Calculating content bounds" -ScriptBlock {
+                $borderOffset = if ($self.ShowBorder) { 1 } else { 0 }
+                
+                # AI: Resolve percentage values for width and height
+                $resolvedWidth = if ($self.Width -is [string] -and $self.Width -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferWidth * $percentage / 100))
+                } else {
+                    [int]$self.Width
+                }
+                
+                $resolvedHeight = if ($self.Height -is [string] -and $self.Height -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferHeight * $percentage / 100))
+                } else {
+                    [int]$self.Height
+                }
+                
+                return @{
+                    X = $self.X + $borderOffset
+                    Y = $self.Y + $borderOffset
+                    Width = $resolvedWidth - (2 * $borderOffset)
+                    Height = $resolvedHeight - (2 * $borderOffset)
+                }
+            }
+        }
+        
         # Column configuration example:
         # @{
         #     Name = "PropertyName"
@@ -103,11 +133,21 @@ function global:New-TuiDataTable {
                 
                 # Calculate page size if auto
                 if ($self.PageSize -eq 0) {
+                    # AI: Resolve height if it's a percentage
+                    $resolvedHeight = if ($self.Height -is [string] -and $self.Height -match '^(\d+)%') {
+                        $percentage = [int]$matches[1]
+                        [int]([Math]::Floor($global:TuiState.BufferHeight * $percentage / 100))
+                    } else {
+                        [int]$self.Height
+                    }
+                    
                     $headerLines = if ($self.ShowHeader) { 3 } else { 0 }
                     $footerLines = if ($self.ShowFooter) { 2 } else { 0 }
                     $filterLines = if ($self.AllowFilter) { 2 } else { 0 }
                     $borderAdjust = if ($self.ShowBorder) { 2 } else { 0 }
-                    $self.PageSize = $self.Height - $headerLines - $footerLines - $filterLines - $borderAdjust
+                    $calculatedPageSize = $resolvedHeight - $headerLines - $footerLines - $filterLines - $borderAdjust
+                    # AI: Ensure minimum page size of 1 to prevent display issues
+                    $self.PageSize = [Math]::Max(1, $calculatedPageSize)
                 }
                 
                 # Adjust current page
@@ -126,15 +166,45 @@ function global:New-TuiDataTable {
                 # CRITICAL: Check if component is visible
                 if ($self.Visible -eq $false) { return }
                 
+                # AI: Resolve dimensions before checking if they changed
+                $currentResolvedWidth = if ($self.Width -is [string] -and $self.Width -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferWidth * $percentage / 100))
+                } else {
+                    [int]$self.Width
+                }
+                
+                $currentResolvedHeight = if ($self.Height -is [string] -and $self.Height -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferHeight * $percentage / 100))
+                } else {
+                    [int]$self.Height
+                }
+                
                 # Force ProcessData if dimensions changed
-                if ($self._lastRenderedWidth -ne $self.Width -or $self._lastRenderedHeight -ne $self.Height) {
+                if ($self._lastRenderedWidth -ne $currentResolvedWidth -or $self._lastRenderedHeight -ne $currentResolvedHeight) {
                     & $self.ProcessData -self $self
-                    $self._lastRenderedWidth = $self.Width
-                    $self._lastRenderedHeight = $self.Height
+                    $self._lastRenderedWidth = $currentResolvedWidth
+                    $self._lastRenderedHeight = $currentResolvedHeight
                 }
                 
                 # NOTE: ProcessData is now called by external code when data changes
                 # This prevents unnecessary recalculation on every render frame
+                
+                # AI: Resolve percentage dimensions before using them
+                $resolvedWidth = if ($self.Width -is [string] -and $self.Width -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferWidth * $percentage / 100))
+                } else {
+                    [int]$self.Width
+                }
+                
+                $resolvedHeight = if ($self.Height -is [string] -and $self.Height -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferHeight * $percentage / 100))
+                } else {
+                    [int]$self.Height
+                }
                 
                 # Calculate content area based on border settings
                 if ($self.ShowBorder) {
@@ -145,20 +215,20 @@ function global:New-TuiDataTable {
                     }
                     
                     $titleText = if ($null -ne $self.Title) { $self.Title } else { 'Data Table' }
-                    Write-BufferBox -X $self.X -Y $self.Y -Width $self.Width -Height $self.Height `
+                    Write-BufferBox -X $self.X -Y $self.Y -Width $resolvedWidth -Height $resolvedHeight `
                         -BorderColor $borderColor -Title " $titleText "
                     
                     # Adjust content area for border
                     $contentX = $self.X + 1
                     $contentY = $self.Y + 1
-                    $contentWidth = $self.Width - 2
-                    $contentHeight = $self.Height - 2
+                    $contentWidth = $resolvedWidth - 2
+                    $contentHeight = $resolvedHeight - 2
                 } else {
                     # No border, use full dimensions
                     $contentX = $self.X
                     $contentY = $self.Y
-                    $contentWidth = $self.Width
-                    $contentHeight = $self.Height
+                    $contentWidth = $resolvedWidth
+                    $contentHeight = $resolvedHeight
                 }
                 
                 $currentY = $contentY
@@ -266,11 +336,19 @@ function global:New-TuiDataTable {
                 }
                 
                 # Data rows
+                # AI: Use Data directly if ProcessedData is empty (fallback for initialization issues)
+                $dataToRender = if ($self.ProcessedData.Count -eq 0 -and $self.Data.Count -gt 0) {
+                    Write-Log -Level Warning -Message "DataTable '$($self.Name)' using raw Data as ProcessedData is empty"
+                    $self.Data
+                } else {
+                    $self.ProcessedData
+                }
+                
                 $startIdx = $self.CurrentPage * $self.PageSize
-                $endIdx = [Math]::Min($startIdx + $self.PageSize - 1, $self.ProcessedData.Count - 1)
+                $endIdx = [Math]::Min($startIdx + $self.PageSize - 1, $dataToRender.Count - 1)
                 
                 for ($i = $startIdx; $i -le $endIdx; $i++) {
-                    $row = $self.ProcessedData[$i]
+                    $row = $dataToRender[$i]
                     $rowX = $contentX
                     
                     # Selection highlighting
@@ -335,7 +413,6 @@ function global:New-TuiDataTable {
                             }
                         }
                         
-                        
                         # Align value
                         if ($col.Align -eq "Right") {
                             $alignedValue = $displayValue.PadLeft($width)
@@ -377,11 +454,15 @@ function global:New-TuiDataTable {
                 }
                 
                 # Empty state
-                if ($self.ProcessedData.Count -eq 0) {
+                if ($dataToRender.Count -eq 0) {
                     $emptyMessage = if ($self.FilterText) {
                         "No results match the filter"
                     } else {
                         "No data to display"
+                    }
+                    # AI: Add debug info to empty state message
+                    if ($self.Data.Count -gt 0) {
+                        $emptyMessage += " (Data: $($self.Data.Count) items)"
                     }
                     $msgX = $contentX + [Math]::Floor(($contentWidth - $emptyMessage.Length) / 2)
                     $msgY = $contentY + [Math]::Floor($contentHeight / 2)
@@ -394,7 +475,7 @@ function global:New-TuiDataTable {
                     $footerY = $contentY + $contentHeight - 1
                     
                     # Status
-                    $statusText = "$($self.ProcessedData.Count) rows"
+                    $statusText = "$($dataToRender.Count) rows"
                     if ($self.FilterText) {
                         $statusText += " (filtered from $($self.Data.Count))"
                     }
@@ -405,17 +486,17 @@ function global:New-TuiDataTable {
                         -ForegroundColor (Get-ThemeColor "Subtle" -Default ([ConsoleColor]::DarkGray))
                     
                     # Pagination
-                    if ($self.ProcessedData.Count -gt $self.PageSize) {
-                        $totalPages = [Math]::Ceiling($self.ProcessedData.Count / [Math]::Max(1, $self.PageSize))
+                    if ($dataToRender.Count -gt $self.PageSize) {
+                        $totalPages = [Math]::Ceiling($dataToRender.Count / [Math]::Max(1, $self.PageSize))
                         $pageText = "Page $($self.CurrentPage + 1)/$totalPages"
                         Write-BufferString -X ($contentX + $contentWidth - $pageText.Length - 1) -Y $footerY `
                             -Text $pageText -ForegroundColor (Get-ThemeColor "Info" -Default ([ConsoleColor]::Blue))
                     }
                     
                     # Scrollbar
-                    if ($self.ProcessedData.Count -gt $self.PageSize) {
+                    if ($dataToRender.Count -gt $self.PageSize) {
                         $scrollHeight = $contentHeight - 4 - (if ($self.ShowHeader) { 2 } else { 0 }) - (if ($self.AllowFilter) { 2 } else { 0 })
-                        $scrollPos = [Math]::Floor(($self.SelectedRow / ($self.ProcessedData.Count - 1)) * ($scrollHeight - 1))
+                        $scrollPos = [Math]::Floor(($self.SelectedRow / ([Math]::Max(1, $dataToRender.Count - 1))) * ($scrollHeight - 1))
                         $scrollX = $contentX + $contentWidth - 1
                         
                         for ($i = 0; $i -lt $scrollHeight; $i++) {
@@ -466,7 +547,7 @@ function global:New-TuiDataTable {
                                     $self.SelectedRows = @(0..($self.ProcessedData.Count - 1))
                                 }
                                 if ($self.OnSelectionChange) {
-                                    Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -Context "OnSelectionChange" -AdditionalData @{ Component = $self.Name; SelectedRows = $self.SelectedRows } -ScriptBlock {
+                                    Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -Context "OnSelectionChange" -AdditionalData @{ ComponentName = $self.Name; SelectedRows = $self.SelectedRows } -ScriptBlock {
                                         & $self.OnSelectionChange -SelectedRows $self.SelectedRows
                                     }
                                 }
@@ -576,7 +657,7 @@ function global:New-TuiDataTable {
                                 $self.SelectedRows += $self.SelectedRow
                             }
                             if ($self.OnSelectionChange) {
-                                Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -Context "OnSelectionChange" -AdditionalData @{ Component = $self.Name; SelectedRows = $self.SelectedRows } -ScriptBlock {
+                                Invoke-WithErrorHandling -Component "$($self.Name).OnSelectionChange" -Context "OnSelectionChange" -AdditionalData @{ ComponentName = $self.Name; SelectedRows = $self.SelectedRows } -ScriptBlock {
                                     & $self.OnSelectionChange -SelectedRows $self.SelectedRows
                                 }
                             }
@@ -595,7 +676,8 @@ function global:New-TuiDataTable {
                     }
                     ([ConsoleKey]::Enter) {
                         if ($self.OnRowSelect -and $self.ProcessedData.Count -gt 0) {
-                            Invoke-WithErrorHandling -Component "$($self.Name).OnRowSelect" -Context "OnRowSelect" -AdditionalData @{ Component = $self.Name; SelectedRow = $self.SelectedRow; MultiSelect = $self.MultiSelect } -ScriptBlock {
+                            # AI: FIX - Corrected the parameter conflict in AdditionalData
+                            Invoke-WithErrorHandling -Component "$($self.Name).OnRowSelect" -Context "OnRowSelect" -AdditionalData @{ ComponentName = $self.Name; SelectedRow = $self.SelectedRow; MultiSelect = $self.MultiSelect } -ScriptBlock {
                                 $selectedData = if ($self.MultiSelect) {
                                     @($self.SelectedRows | ForEach-Object { $self.ProcessedData[$_] })
                                 } else {
@@ -644,7 +726,7 @@ function global:New-TuiDataTable {
         # Public methods
         RefreshData = {
             param($self)
-            Invoke-WithErrorHandling -Component "$($self.Name).RefreshData" -Context "RefreshData" -AdditionalData @{ Component = $self.Name } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).RefreshData" -Context "RefreshData" -AdditionalData @{ ComponentName = $self.Name } -ScriptBlock {
                 & $self.ProcessData -self $self
                 Request-TuiRefresh
             }
@@ -652,7 +734,7 @@ function global:New-TuiDataTable {
         
         SetFilter = {
             param($self, $FilterText, $FilterColumn)
-            Invoke-WithErrorHandling -Component "$($self.Name).SetFilter" -Context "SetFilter" -AdditionalData @{ Component = $self.Name; FilterText = $FilterText; FilterColumn = $FilterColumn } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).SetFilter" -Context "SetFilter" -AdditionalData @{ ComponentName = $self.Name; FilterText = $FilterText; FilterColumn = $FilterColumn } -ScriptBlock {
                 $self.FilterText = $FilterText
                 $self.FilterColumn = $FilterColumn
                 & $self.ProcessData -self $self
@@ -662,7 +744,7 @@ function global:New-TuiDataTable {
         
         ExportData = {
             param($self, $Format = "CSV", $FilePath)
-            Invoke-WithErrorHandling -Component "$($self.Name).ExportData" -Context "ExportData" -AdditionalData @{ Component = $self.Name; Format = $Format; FilePath = $FilePath } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).ExportData" -Context "ExportData" -AdditionalData @{ ComponentName = $self.Name; Format = $Format; FilePath = $FilePath } -ScriptBlock {
                 $exportData = if ($self.FilterText) { $self.ProcessedData } else { $self.Data }
                 
                 switch ($Format.ToUpper()) {
@@ -698,8 +780,16 @@ function global:New-TuiDataTable {
         }
     }
     
+    # AI: Ensure initial data is properly set before processing
+    if ($null -eq $component.Data) {
+        $component.Data = @()
+    }
+    
     # Initialize data processing after component is created
     & $component.ProcessData -self $component
+    
+    # AI: Log initial state for debugging
+    Write-Log -Level Debug -Message "DataTable '$($component.Name)' created with $(@($component.Data).Count) data items, $(@($component.ProcessedData).Count) processed items"
     
     return $component
 }
@@ -777,16 +867,31 @@ function global:New-TuiTreeView {
                 # Flatten tree first
                 & $self.FlattenTree -self $self
                 
+                # AI: Resolve percentage dimensions before using them
+                $resolvedWidth = if ($self.Width -is [string] -and $self.Width -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferWidth * $percentage / 100))
+                } else {
+                    [int]$self.Width
+                }
+                
+                $resolvedHeight = if ($self.Height -is [string] -and $self.Height -match '^(\d+)%') {
+                    $percentage = [int]$matches[1]
+                    [int]([Math]::Floor($global:TuiState.BufferHeight * $percentage / 100))
+                } else {
+                    [int]$self.Height
+                }
+                
                 $borderColor = if ($self.IsFocused) { 
                     Get-ThemeColor "Accent" -Default ([ConsoleColor]::Cyan)
                 } else { 
                     Get-ThemeColor "Border" -Default ([ConsoleColor]::DarkGray)
                 }
                 
-                Write-BufferBox -X $self.X -Y $self.Y -Width $self.Width -Height $self.Height `
+                Write-BufferBox -X $self.X -Y $self.Y -Width $resolvedWidth -Height $resolvedHeight `
                     -BorderColor $borderColor -Title " Tree View "
                 
-                $visibleHeight = $self.Height - 2
+                $visibleHeight = $resolvedHeight - 2
                 $startIdx = $self.ScrollOffset
                 $endIdx = [Math]::Min($self.FlattenedNodes.Count - 1, $startIdx + $visibleHeight - 1)
                 
@@ -821,14 +926,14 @@ function global:New-TuiTreeView {
                     
                     # Clear line if selected
                     if ($isSelected) {
-                        Write-BufferString -X ($self.X + 1) -Y $currentY -Text (" " * ($self.Width - 2)) `
+                        Write-BufferString -X ($self.X + 1) -Y $currentY -Text (" " * ($resolvedWidth - 2)) `
                             -BackgroundColor $bg
                     }
                     
                     # Render node
                     $nodeText = "$indent$expandIcon $nodeIcon $($node.Name)"
-                    if ($nodeText.Length -gt ($self.Width - 3)) {
-                        $nodeText = $nodeText.Substring(0, $self.Width - 6) + "..."
+                    if ($nodeText.Length -gt ($resolvedWidth - 3)) {
+                        $nodeText = $nodeText.Substring(0, $resolvedWidth - 6) + "..."
                     }
                     
                     Write-BufferString -X ($self.X + 1) -Y $currentY -Text $nodeText `
@@ -848,7 +953,7 @@ function global:New-TuiTreeView {
                     for ($i = 0; $i -lt $scrollHeight; $i++) {
                         $char = if ($i -eq $scrollPos) { "█" } else { "│" }
                         $color = if ($i -eq $scrollPos) { Get-ThemeColor "Accent" -Default ([ConsoleColor]::Cyan) } else { Get-ThemeColor "Subtle" -Default ([ConsoleColor]::DarkGray) }
-                        Write-BufferString -X ($self.X + $self.Width - 2) -Y ($self.Y + 1 + $i) `
+                        Write-BufferString -X ($self.X + $resolvedWidth - 2) -Y ($self.Y + 1 + $i) `
                             -Text $char -ForegroundColor $color
                     }
                 }
@@ -933,7 +1038,7 @@ function global:New-TuiTreeView {
                     }
                     ([ConsoleKey]::Enter) {
                         if ($self.OnNodeSelect -and $self.SelectedNode) {
-                            Invoke-WithErrorHandling -Component "$($self.Name).OnNodeSelect" -Context "OnNodeSelect" -AdditionalData @{ Component = $self.Name; SelectedNode = $self.SelectedNode.Name } -ScriptBlock {
+                            Invoke-WithErrorHandling -Component "$($self.Name).OnNodeSelect" -Context "OnNodeSelect" -AdditionalData @{ ComponentName = $self.Name; SelectedNode = $self.SelectedNode.Name } -ScriptBlock {
                                 # Build path
                                 $path = @()
                                 $current = $self.SelectedNode
@@ -1001,7 +1106,7 @@ function global:New-TuiTreeView {
         # Public methods
         AddNode = {
             param($self, $ParentNode, $NewNode)
-            Invoke-WithErrorHandling -Component "$($self.Name).AddNode" -Context "AddNode" -AdditionalData @{ Component = $self.Name; ParentNode = $ParentNode.Name; NewNode = $NewNode.Name } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).AddNode" -Context "AddNode" -AdditionalData @{ ComponentName = $self.Name; ParentNode = $ParentNode.Name; NewNode = $NewNode.Name } -ScriptBlock {
                 if (-not $ParentNode.Children) {
                     $ParentNode.Children = @()
                 }
@@ -1013,7 +1118,7 @@ function global:New-TuiTreeView {
         
         RemoveNode = {
             param($self, $Node)
-            Invoke-WithErrorHandling -Component "$($self.Name).RemoveNode" -Context "RemoveNode" -AdditionalData @{ Component = $self.Name; Node = $Node.Name } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).RemoveNode" -Context "RemoveNode" -AdditionalData @{ ComponentName = $self.Name; Node = $Node.Name } -ScriptBlock {
                 if ($Node.Parent) {
                     $Node.Parent.Children = @($Node.Parent.Children | Where-Object { $_ -ne $Node })
                     if ($self.SelectedNode -eq $Node) {
@@ -1026,7 +1131,7 @@ function global:New-TuiTreeView {
         
         FindNode = {
             param($self, $Predicate)
-            Invoke-WithErrorHandling -Component "$($self.Name).FindNode" -Context "FindNode" -AdditionalData @{ Component = $self.Name } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "$($self.Name).FindNode" -Context "FindNode" -AdditionalData @{ ComponentName = $self.Name } -ScriptBlock {
                 $find = {
                     param($Node)
                     if (& $Predicate $Node) { return $Node }

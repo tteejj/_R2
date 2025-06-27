@@ -1,31 +1,12 @@
-# Text Resources Module
-# Simple text management without external dependencies
+# Text Resource Management Module
+# Provides centralized text/string management for internationalization
 
+# Script-level variable to store all text resources
 $script:TextResources = @{
-    # Common UI strings
-    Common = @{
-        OK = "OK"
-        Cancel = "Cancel"
-        Save = "Save"
-        Delete = "Delete"
-        Edit = "Edit"
-        Add = "Add"
-        Remove = "Remove"
-        Back = "Back"
-        Next = "Next"
-        Previous = "Previous"
-        Close = "Close"
-        Error = "Error"
-        Warning = "Warning"
-        Info = "Information"
-        Success = "Success"
-        Loading = "Loading..."
-        PleaseWait = "Please wait..."
-    }
-    
-    # Dashboard specific
+    # Dashboard screen specific
     Dashboard = @{
-        Title = "PMC Terminal Dashboard"
+        Title = "PMC Terminal v5 - Dashboard"
+        Welcome = "Welcome to PMC Terminal"
         QuickActions = "Quick Actions"
         ActiveTimers = "Active Timers"
         TodaysTasks = "Today's Tasks"
@@ -48,53 +29,79 @@ $script:TextResources = @{
         SortByCreated = "Created"
     }
     
-    # Form labels
-    Forms = @{
-        Title = "Title"
-        Description = "Description"
-        Category = "Category"
-        Priority = "Priority"
-        DueDate = "Due Date"
-        Status = "Status"
-        Project = "Project"
-        Hours = "Hours"
-        Date = "Date"
+    # Timer screen specific
+    Timer = @{
+        Title = "Timer Management"
+        StartTimer = "Start Timer"
+        StopTimer = "Stop Timer"
+        PauseTimer = "Pause Timer"
+        ResumeTimer = "Resume Timer"
+        TimerRunning = "Timer Running"
+        TimerPaused = "Timer Paused"
+        TimerStopped = "Timer Stopped"
+        ElapsedTime = "Elapsed Time"
     }
     
-    # Validation messages
-    Validation = @{
-        Required = "{0} is required"
-        MinLength = "{0} must be at least {1} characters"
-        MaxLength = "{0} cannot exceed {1} characters"
-        InvalidDate = "Invalid date format"
-        InvalidNumber = "Must be a valid number"
+    # Settings screen specific
+    Settings = @{
+        Title = "Settings"
+        General = "General Settings"
+        Appearance = "Appearance"
+        Behavior = "Behavior"
+        DataSettings = "Data Settings"
+        ImportData = "Import Data"
+        ExportData = "Export Data"
+        ResetSettings = "Reset to Defaults"
     }
     
-    # Status messages
-    Status = @{
-        Saved = "Changes saved successfully"
-        Deleted = "Item deleted successfully"
-        Updated = "Item updated successfully"
-        Created = "Item created successfully"
-        Error = "An error occurred: {0}"
+    # Common UI elements
+    Common = @{
+        Save = "Save"
+        Cancel = "Cancel"
+        Delete = "Delete"
+        Edit = "Edit"
+        Add = "Add"
+        Remove = "Remove"
+        Close = "Close"
+        Back = "Back"
+        Next = "Next"
+        Previous = "Previous"
+        Yes = "Yes"
+        No = "No"
+        OK = "OK"
+        Error = "Error"
+        Warning = "Warning"
+        Info = "Info"
+        Success = "Success"
+    }
+    
+    # Error messages
+    Errors = @{
+        FileNotFound = "File not found: {0}"
+        AccessDenied = "Access denied to file: {0}"
+        InvalidData = "Invalid data format"
+        NetworkError = "Network connection error"
+        DatabaseError = "Database operation failed"
+        UnexpectedError = "An unexpected error occurred"
     }
 }
 
 function global:Get-Text {
     <#
     .SYNOPSIS
-    Retrieves a text resource by key path
+    Gets a text resource by key path
     
     .PARAMETER Key
-    Dot-separated path to the text resource (e.g., "Common.OK")
+    Dot-separated path to the text resource (e.g., "Dashboard.Welcome")
     
     .PARAMETER Format
-    Optional format arguments for string interpolation
+    Optional format arguments for string formatting
     
     .EXAMPLE
-    Get-Text "Common.OK"
-    Get-Text "Validation.Required" -Format "Username"
-    Get-Text "Status.Error" -Format $_.Exception.Message
+    Get-Text "Dashboard.Welcome"
+    
+    .EXAMPLE
+    Get-Text "Errors.FileNotFound" "myfile.txt"
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -103,7 +110,7 @@ function global:Get-Text {
         [Parameter(ValueFromRemainingArguments=$true)]
         [object[]]$Format
     )
-    Invoke-WithErrorHandling -Component "TextResources.GetText" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "TextResources.GetText" -Context "GetText" -ScriptBlock {
         # Navigate the nested hashtable
         $parts = $Key -split '\.'
         $current = $script:TextResources
@@ -128,11 +135,7 @@ function global:Get-Text {
         }
         
         return $current
-    } -Context @{ Key = $Key; FormatArgs = $Format } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to retrieve text resource for key '$($Exception.Context.Key)': $($Exception.Message)" -Data $Exception.Context
-        return $Key # Return key as fallback on error
-    }
+    } -AdditionalData @{ Key = $Key; FormatArgs = $Format }
 }
 
 function global:Set-TextResource {
@@ -156,12 +159,12 @@ function global:Set-TextResource {
         [Parameter(Mandatory=$true)]
         [string]$Value
     )
-    Invoke-WithErrorHandling -Component "TextResources.SetTextResource" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "TextResources.SetTextResource" -Context "SetTextResource" -ScriptBlock {
         $parts = $Key -split '\.'
         $current = $script:TextResources
         
-        # Navigate to the parent
-        for ($i = 0; $i -lt $parts.Count - 1; $i++) {
+        # Navigate to the parent container
+        for ($i = 0; $i -lt ($parts.Count - 1); $i++) {
             $part = $parts[$i]
             if (-not $current.ContainsKey($part)) {
                 $current[$part] = @{}
@@ -169,12 +172,10 @@ function global:Set-TextResource {
             $current = $current[$part]
         }
         
-        # Set the value
+        # Set the final value
         $current[$parts[-1]] = $Value
-    } -Context @{ Key = $Key; Value = $Value } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to set text resource for key '$($Exception.Context.Key)': $($Exception.Message)" -Data $Exception.Context
-    }
+        Write-Verbose "Set text resource '$Key' to '$Value'"
+    } -AdditionalData @{ Key = $Key; Value = $Value }
 }
 
 function global:Get-TextResources {
@@ -182,12 +183,8 @@ function global:Get-TextResources {
     .SYNOPSIS
     Gets all text resources (useful for export/import)
     #>
-    Invoke-WithErrorHandling -Component "TextResources.GetTextResources" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "TextResources.GetTextResources" -Context "GetAllResources" -ScriptBlock {
         return $script:TextResources.Clone()
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to get all text resources: $($Exception.Message)" -Data $Exception.Context
-        return @{} # Return empty hashtable on error
     }
 }
 
@@ -203,7 +200,7 @@ function global:Import-TextResources {
         [Parameter(Mandatory=$true)]
         [string]$Path
     )
-    Invoke-WithErrorHandling -Component "TextResources.ImportTextResources" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "TextResources.ImportTextResources" -Context "ImportTextResources" -ScriptBlock {
         if (Test-Path $Path) {
             try {
                 $imported = Get-Content $Path -Raw | ConvertFrom-Json -AsHashtable
@@ -215,10 +212,7 @@ function global:Import-TextResources {
         } else {
             Write-Log -Level Error -Message "File not found: $Path" -Data @{ FilePath = $Path }
         }
-    } -Context @{ FilePath = $Path } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to import text resources from '$($Exception.Context.FilePath)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -AdditionalData @{ FilePath = $Path }
 }
 
 function global:Export-TextResources {
@@ -233,17 +227,14 @@ function global:Export-TextResources {
         [Parameter(Mandatory=$true)]
         [string]$Path
     )
-    Invoke-WithErrorHandling -Component "TextResources.ExportTextResources" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "TextResources.ExportTextResources" -Context "ExportTextResources" -ScriptBlock {
         try {
             $script:TextResources | ConvertTo-Json -Depth 10 | Set-Content $Path
             Write-Host "Text resources exported successfully"
         } catch {
             Write-Log -Level Error -Message "Failed to export text resources to '$Path': $_" -Data @{ FilePath = $Path; Exception = $_ }
         }
-    } -Context @{ FilePath = $Path } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to export text resources to '$($Exception.Context.FilePath)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -AdditionalData @{ FilePath = $Path }
 }
 
 # Export functions

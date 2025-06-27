@@ -9,33 +9,32 @@
     
 .NOTES
     AI: This module replaces the previous implicit data structures with strongly-typed classes
+    AI: Using PowerShell native enum syntax for better compatibility
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-#region Enums
+#region Enums - Define first for class dependencies
 
-# AI: Using Add-Type to define enums for PowerShell 5.1 compatibility
-Add-Type -TypeDefinition @"
-    public enum TaskStatus {
-        Pending,
-        InProgress,
-        Completed,
-        Cancelled
-    }
-    
-    public enum TaskPriority {
-        Low,
-        Medium,
-        High
-    }
-    
-    public enum BillingType {
-        Billable,
-        NonBillable
-    }
-"@ -ErrorAction SilentlyContinue
+# AI: Using PowerShell native enum syntax instead of Add-Type for better reliability
+enum TaskStatus {
+    Pending
+    InProgress
+    Completed
+    Cancelled
+}
+
+enum TaskPriority {
+    Low
+    Medium
+    High
+}
+
+enum BillingType {
+    Billable
+    NonBillable
+}
 
 #endregion
 
@@ -392,4 +391,17 @@ class PmcProject {
 #endregion
 
 # Export all public types
-Export-ModuleMember -Function * -Variable *
+# AI: In PowerShell 5.1, enums need to be explicitly made available in global scope
+$global:TaskStatus = [TaskStatus]
+$global:TaskPriority = [TaskPriority]
+$global:BillingType = [BillingType]
+$global:PmcTask = [PmcTask]
+$global:PmcProject = [PmcProject]
+
+Export-ModuleMember -Function * -Variable * -Alias @(
+    'TaskStatus',
+    'TaskPriority', 
+    'BillingType',
+    'PmcTask',
+    'PmcProject'
+)

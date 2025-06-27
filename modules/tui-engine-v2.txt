@@ -278,11 +278,12 @@ function Process-TuiInput {
         while ($script:TuiState.InputQueue.TryDequeue([ref]$keyInfo)) {
             $processedAny = $true
             $script:TuiState.LastActivity = [DateTime]::Now
-            Invoke-WithErrorHandling -Component "Engine.ProcessInput" -ScriptBlock {
-                Process-SingleKeyInput -keyInfo $keyInfo
-            } -Context @{ KeyInfo = $keyInfo } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "Error processing single key input: $($Exception.Message)" -Data $Exception.Context
+            try {
+                Invoke-WithErrorHandling -Component "Engine.ProcessInput" -Context "Processing single key input" -ScriptBlock {
+                    Process-SingleKeyInput -keyInfo $keyInfo
+                } -AdditionalData @{ KeyInfo = $keyInfo }
+            } catch {
+                Write-Log -Level Error -Message "Error processing single key input: $($_.Exception.Message)" -Data $_
                 Request-TuiRefresh
             }
         }
@@ -293,11 +294,12 @@ function Process-TuiInput {
                 $script:TuiState.InputQueue.RemoveAt(0)
                 $processedAny = $true
                 $script:TuiState.LastActivity = [DateTime]::Now
-                Invoke-WithErrorHandling -Component "Engine.ProcessInput" -ScriptBlock {
-                    Process-SingleKeyInput -keyInfo $keyInfo
-                } -Context @{ KeyInfo = $keyInfo } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Error processing single key input: $($Exception.Message)" -Data $Exception.Context
+                try {
+                    Invoke-WithErrorHandling -Component "Engine.ProcessInput" -Context "Processing single key input" -ScriptBlock {
+                        Process-SingleKeyInput -keyInfo $keyInfo
+                    } -AdditionalData @{ KeyInfo = $keyInfo }
+                } catch {
+                    Write-Log -Level Error -Message "Error processing single key input: $($_.Exception.Message)" -Data $_
                     Request-TuiRefresh
                 }
             } catch {
@@ -502,7 +504,7 @@ function global:Start-TuiLoop {
                     Start-Sleep -Milliseconds $sleepTime
                 }
             }
-            catch [HeliosException] {
+            catch [Helios.HeliosException] {
                 # --- This block handles our custom, "recoverable" errors ---
                 $exception = $_.Exception
                 
@@ -560,11 +562,12 @@ function Render-Frame {
         # This is for elements NOT in the component tree. The screen's Render method
         # should ONLY draw these non-component elements.
         if ($script:TuiState.CurrentScreen -and $script:TuiState.CurrentScreen.Render) {
-            Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).Render" -ScriptBlock {
-                & $script:TuiState.CurrentScreen.Render -self $script:TuiState.CurrentScreen
-            } -Context @{ ScreenName = $script:TuiState.CurrentScreen.Name } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "Screen-level render error: $($Exception.Message)" -Data $Exception.Context
+            try {
+            Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).Render" -Context "Rendering screen chrome" -ScriptBlock {
+            & $script:TuiState.CurrentScreen.Render -self $script:TuiState.CurrentScreen
+            } -AdditionalData @{ ScreenName = $script:TuiState.CurrentScreen.Name }
+            } catch {
+                Write-Log -Level Error -Message "Screen-level render error: $($_.Exception.Message)" -Data $_
             }
         }
 
@@ -629,17 +632,13 @@ function Render-Frame {
         # 4. DRAW the sorted components
         foreach ($componentToRender in $sortedQueue) {
             if ($componentToRender.Render) {
-                Invoke-WithErrorHandling -Component "$($componentToRender.Name ?? $componentToRender.Type).Render" -ScriptBlock {
-                    & $componentToRender.Render -self $componentToRender
-                } -Context @{ ComponentType = $componentToRender.Type; ComponentName = $componentToRender.Name; ComponentProps = $componentToRender.Props } -ErrorHandler {
-                    param($Exception)
-                    throw [ComponentRenderException]::new(
-                        "Failed to render component '$($Exception.Context.ComponentName ?? $Exception.Context.ComponentType)'",
-                        @{
-                            FailingComponent = $Exception.Context.Component
-                            OriginalException = $Exception.OriginalError # Preserve the original error object
-                        }
-                    )
+                try {
+                    Invoke-WithErrorHandling -Component "$($componentToRender.Name ?? $componentToRender.Type).Render" -Context "Rendering component" -ScriptBlock {
+                        & $componentToRender.Render -self $componentToRender
+                    } -AdditionalData @{ ComponentType = $componentToRender.Type; ComponentName = $componentToRender.Name }
+                } catch {
+                    Write-Log -Level Error -Message "Failed to render component '$($componentToRender.Name ?? $componentToRender.Type)': $($_.Exception.Message)" -Data $_
+                    # Continue rendering other components
                 }
             }
         }
@@ -760,11 +759,12 @@ function global:Push-Screen {
         
         if ($script:TuiState.CurrentScreen) {
             if ($script:TuiState.CurrentScreen.OnExit) { 
-                Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).OnExit" -ScriptBlock {
-                    & $script:TuiState.CurrentScreen.OnExit -self $script:TuiState.CurrentScreen
-                } -Context @{ ScreenName = $script:TuiState.CurrentScreen.Name } -ErrorHandler {
-                    param($Exception)
-                    Write-Warning "Screen exit error: $($Exception.Message)"
+                try {
+                    Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).OnExit" -Context "Screen exit" -ScriptBlock {
+                        & $script:TuiState.CurrentScreen.OnExit -self $script:TuiState.CurrentScreen
+                    } -AdditionalData @{ ScreenName = $script:TuiState.CurrentScreen.Name }
+                } catch {
+                    Write-Warning "Screen exit error: $($_.Exception.Message)"
                 }
             }
             $script:TuiState.ScreenStack.Push($script:TuiState.CurrentScreen)
@@ -774,22 +774,25 @@ function global:Push-Screen {
         $script:TuiState.FocusedComponent = $null  # Clear focus when changing screens
         
         if ($Screen.Init) { 
-            Invoke-WithErrorHandling -Component "$($Screen.Name).Init" -ScriptBlock {
-                # Pass services if available on the screen object
-                if ($Screen._services) {
-                    & $Screen.Init -self $Screen -services $Screen._services
-                } else {
-                    & $Screen.Init -self $Screen
-                }
-            } -Context @{ ScreenName = $Screen.Name } -ErrorHandler {
-                param($Exception)
-                throw [ServiceInitializationException]::new(
-                    "Failed to initialize screen '$($Exception.Context.ScreenName)'",
-                    @{
-                        FailingScreen = $Screen
-                        OriginalException = $Exception.OriginalError
+            try {
+                Invoke-WithErrorHandling -Component "$($Screen.Name).Init" -Context "Screen initialization" -ScriptBlock {
+                    # AI: Ensure services are passed to screen init
+                    # Check for services in multiple locations
+                    $services = $null
+                    if ($Screen._services) {
+                        $services = $Screen._services
+                    } elseif ($global:Services) {
+                        $services = $global:Services
                     }
-                )
+                    
+                    if ($services) {
+                        & $Screen.Init -self $Screen -services $services
+                    } else {
+                        & $Screen.Init -self $Screen
+                    }
+                } -AdditionalData @{ ScreenName = $Screen.Name }
+            } catch {
+                throw "Failed to initialize screen '$($Screen.Name)': $($_.Exception.Message)"
             }
         }
         
@@ -827,19 +830,21 @@ function global:Pop-Screen {
         
         # Call lifecycle hooks in correct order
         if ($screenToExit -and $screenToExit.OnExit) { 
-            Invoke-WithErrorHandling -Component "$($screenToExit.Name).OnExit" -ScriptBlock {
-                & $screenToExit.OnExit -self $screenToExit
-            } -Context @{ ScreenName = $screenToExit.Name } -ErrorHandler {
-                param($Exception)
-                Write-Warning "Screen exit error: $($Exception.Message)"
+            try {
+                Invoke-WithErrorHandling -Component "$($screenToExit.Name).OnExit" -Context "Screen exit" -ScriptBlock {
+                    & $screenToExit.OnExit -self $screenToExit
+                } -AdditionalData @{ ScreenName = $screenToExit.Name }
+            } catch {
+                Write-Warning "Screen exit error: $($_.Exception.Message)"
             }
         }
         if ($script:TuiState.CurrentScreen -and $script:TuiState.CurrentScreen.OnResume) { 
-            Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).OnResume" -ScriptBlock {
-                & $script:TuiState.CurrentScreen.OnResume -self $script:TuiState.CurrentScreen
-            } -Context @{ ScreenName = $script:TuiState.CurrentScreen.Name } -ErrorHandler {
-                param($Exception)
-                Write-Warning "Screen resume error: $($Exception.Message)"
+            try {
+                Invoke-WithErrorHandling -Component "$($script:TuiState.CurrentScreen.Name).OnResume" -Context "Screen resume" -ScriptBlock {
+                    & $script:TuiState.CurrentScreen.OnResume -self $script:TuiState.CurrentScreen
+                } -AdditionalData @{ ScreenName = $script:TuiState.CurrentScreen.Name }
+            } catch {
+                Write-Warning "Screen resume error: $($_.Exception.Message)"
             }
         }
         
@@ -1048,11 +1053,12 @@ function global:Register-Component {
     
     # Initialize component with error handling
     if ($Component.Init) {
-        Invoke-WithErrorHandling -Component "$($Component.Name ?? $Component.Type).Init" -ScriptBlock {
-            & $Component.Init -self $Component
-        } -Context @{ ComponentType = $Component.Type; ComponentName = $Component.Name } -ErrorHandler {
-            param($Exception)
-            Write-Warning "Component init error: $($Exception.Message)"
+        try {
+            Invoke-WithErrorHandling -Component "$($Component.Name ?? $Component.Type).Init" -Context "Component initialization" -ScriptBlock {
+                & $Component.Init -self $Component
+            } -AdditionalData @{ ComponentType = $Component.Type; ComponentName = $Component.Name }
+        } catch {
+            Write-Warning "Component init error: $($_.Exception.Message)"
         }
     }
     
@@ -1069,11 +1075,12 @@ function global:Set-ComponentFocus {
     
     # Blur previous component with error handling
     if ($script:TuiState.FocusedComponent -and $script:TuiState.FocusedComponent.OnBlur) {
-        Invoke-WithErrorHandling -Component "$($script:TuiState.FocusedComponent.Name ?? $script:TuiState.FocusedComponent.Type).OnBlur" -ScriptBlock {
-            & $script:TuiState.FocusedComponent.OnBlur -self $script:TuiState.FocusedComponent
-        } -Context @{ ComponentType = $script:TuiState.FocusedComponent.Type; ComponentName = $script:TuiState.FocusedComponent.Name } -ErrorHandler {
-            param($Exception)
-            Write-Warning "Component blur error: $($Exception.Message)"
+        try {
+            Invoke-WithErrorHandling -Component "$($script:TuiState.FocusedComponent.Name ?? $script:TuiState.FocusedComponent.Type).OnBlur" -Context "Component blur" -ScriptBlock {
+                & $script:TuiState.FocusedComponent.OnBlur -self $script:TuiState.FocusedComponent
+            } -AdditionalData @{ ComponentType = $script:TuiState.FocusedComponent.Type; ComponentName = $script:TuiState.FocusedComponent.Name }
+        } catch {
+            Write-Warning "Component blur error: $($_.Exception.Message)"
         }
     }
     
@@ -1085,11 +1092,12 @@ function global:Set-ComponentFocus {
     # Focus new component with error handling
     $script:TuiState.FocusedComponent = $Component
     if ($Component -and $Component.OnFocus) {
-        Invoke-WithErrorHandling -Component "$($Component.Name ?? $Component.Type).OnFocus" -ScriptBlock {
-            & $Component.OnFocus -self $Component
-        } -Context @{ ComponentType = $Component.Type; ComponentName = $Component.Name } -ErrorHandler {
-            param($Exception)
-            Write-Warning "Component focus error: $($Exception.Message)"
+        try {
+            Invoke-WithErrorHandling -Component "$($Component.Name ?? $Component.Type).OnFocus" -Context "Component focus" -ScriptBlock {
+                & $Component.OnFocus -self $Component
+            } -AdditionalData @{ ComponentType = $Component.Type; ComponentName = $Component.Name }
+        } catch {
+            Write-Warning "Component focus error: $($_.Exception.Message)"
         }
     }
     
@@ -1102,11 +1110,12 @@ function global:Clear-ComponentFocus {
     Clears focus from the current component
     #>
     if ($script:TuiState.FocusedComponent -and $script:TuiState.FocusedComponent.OnBlur) {
-        Invoke-WithErrorHandling -Component "$($script:TuiState.FocusedComponent.Name ?? $script:TuiState.FocusedComponent.Type).OnBlur" -ScriptBlock {
-            & $script:TuiState.FocusedComponent.OnBlur -self $script:TuiState.FocusedComponent
-        } -Context @{ ComponentType = $script:TuiState.FocusedComponent.Type; ComponentName = $script:TuiState.FocusedComponent.Name } -ErrorHandler {
-            param($Exception)
-            Write-Warning "Component blur error: $($Exception.Message)"
+        try {
+            Invoke-WithErrorHandling -Component "$($script:TuiState.FocusedComponent.Name ?? $script:TuiState.FocusedComponent.Type).OnBlur" -Context "Component blur" -ScriptBlock {
+                & $script:TuiState.FocusedComponent.OnBlur -self $script:TuiState.FocusedComponent
+            } -AdditionalData @{ ComponentType = $script:TuiState.FocusedComponent.Type; ComponentName = $script:TuiState.FocusedComponent.Name }
+        } catch {
+            Write-Warning "Component blur error: $($_.Exception.Message)"
         }
     }
     
@@ -1288,11 +1297,12 @@ function global:Apply-Layout {
     
     if ($script:TuiState.Layouts.ContainsKey($LayoutType)) {
         $layout = $script:TuiState.Layouts[$LayoutType]
-        Invoke-WithErrorHandling -Component "Layout.$LayoutType" -ScriptBlock {
-            & $layout.Apply -Components $Components -Options $Options
-        } -Context @{ LayoutType = $LayoutType; Options = $Options } -ErrorHandler {
-            param($Exception)
-            Write-Warning "Layout error: $($Exception.Message)"
+        try {
+            Invoke-WithErrorHandling -Component "Layout.$LayoutType" -Context "Applying layout" -ScriptBlock {
+                & $layout.Apply -Components $Components -Options $Options
+            } -AdditionalData @{ LayoutType = $LayoutType; Options = $Options }
+        } catch {
+            Write-Warning "Layout error: $($_.Exception.Message)"
         }
     }
 }
@@ -1748,6 +1758,32 @@ function global:Get-WordWrappedLines {
 }
 #endregion
 
+function global:Stop-TuiEngine {
+    <#
+    .SYNOPSIS
+    Stops the TUI engine and exits the application gracefully
+    #>
+    param()
+    
+    Write-Log -Level Info -Message "Stop-TuiEngine called - shutting down application" -Data @{ Component = "TuiEngine" }
+    
+    # Set the running flag to false to exit the main loop
+    $script:TuiState.Running = $false
+    
+    # Cancel the input thread if available
+    if ($script:TuiState.CancellationTokenSource) {
+        try {
+            $script:TuiState.CancellationTokenSource.Cancel()
+        }
+        catch {
+            Write-Warning "Failed to cancel input thread: $_"
+        }
+    }
+    
+    # Publish shutdown event
+    Safe-PublishEvent -EventName "System.Shutdown" -Data @{ Reason = "User requested" }
+}
+
 # Build export list dynamically
 $exportFunctions = @(
     'Start-TuiLoop', 'Request-TuiRefresh', 'Push-Screen', 'Pop-Screen',
@@ -1757,7 +1793,7 @@ $exportFunctions = @(
     'Get-NextFocusableComponent', 'Handle-TabNavigation', 
     'New-Component', 'Apply-Layout',
     'Get-WordWrappedLines', 'Subscribe-TuiEvent',
-    'Render-Frame', 'Initialize-TuiEngine'
+    'Render-Frame', 'Initialize-TuiEngine', 'Stop-TuiEngine'
 )
 
 # Only export Get-ThemeColor if we defined it

@@ -17,10 +17,7 @@ function global:Show-TuiDialog {
         }
         $script:DialogState.CurrentDialog = $DialogComponent
         Request-TuiRefresh
-    } -Context @{ DialogType = $DialogComponent.Type; DialogTitle = $DialogComponent.Title } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to show dialog '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Showing dialog: $($DialogComponent.Title)" -AdditionalData @{ DialogType = $DialogComponent.Type; DialogTitle = $DialogComponent.Title }
 }
 
 function global:Close-TuiDialog {
@@ -32,10 +29,7 @@ function global:Close-TuiDialog {
             $script:DialogState.CurrentDialog = $null
         }
         Request-TuiRefresh
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to close dialog: $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Closing current dialog"
 }
 
 function global:Show-ConfirmDialog {
@@ -58,25 +52,16 @@ function global:Show-ConfirmDialog {
                 Invoke-WithErrorHandling -Component "ConfirmDialog.OnButtonClick" -ScriptBlock {
                     Close-TuiDialog
                     if ($Index -eq 0) { & $OnConfirm } else { & $OnCancel }
-                } -Context @{ Button = $Button; Index = $Index; DialogTitle = $Title } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Confirm Dialog button click error: $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Confirm dialog button click: $Button" -AdditionalData @{ Button = $Button; Index = $Index; DialogTitle = $Title }
             }
             OnCancel      = { 
                 Invoke-WithErrorHandling -Component "ConfirmDialog.OnCancel" -ScriptBlock {
                     Close-TuiDialog; & $OnCancel 
-                } -Context @{ DialogTitle = $Title } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Confirm Dialog cancel error: $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Confirm dialog cancelled" -AdditionalData @{ DialogTitle = $Title }
             }
         }
         Show-TuiDialog -DialogComponent $dialog
-    } -Context @{ Title = $Title; Message = $Message } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to show confirm dialog '$($Exception.Context.Title)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Creating confirm dialog: $Title" -AdditionalData @{ Title = $Title; Message = $Message }
 }
 
 function global:Show-AlertDialog {
@@ -95,25 +80,16 @@ function global:Show-AlertDialog {
             OnButtonClick = { 
                 Invoke-WithErrorHandling -Component "AlertDialog.OnButtonClick" -ScriptBlock {
                     Close-TuiDialog 
-                } -Context @{ DialogTitle = $Title } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Alert Dialog button click error: $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Alert dialog OK clicked" -AdditionalData @{ DialogTitle = $Title }
             }
             OnCancel      = { 
                 Invoke-WithErrorHandling -Component "AlertDialog.OnCancel" -ScriptBlock {
                     Close-TuiDialog 
-                } -Context @{ DialogTitle = $Title } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Alert Dialog cancel error: $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Alert dialog cancelled" -AdditionalData @{ DialogTitle = $Title }
             }
         }
         Show-TuiDialog -DialogComponent $dialog
-    } -Context @{ Title = $Title; Message = $Message } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to show alert dialog '$($Exception.Context.Title)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Creating alert dialog: $Title" -AdditionalData @{ Title = $Title; Message = $Message }
 }
 
 function global:Show-InputDialog {
@@ -165,7 +141,7 @@ function global:Show-InputDialog {
                     
                     # Draw input value
                     $displayText = $self.State.InputValue
-                    if ($displayText.Length > ($inputWidth - 3)) {
+                    if ($displayText.Length -gt ($inputWidth - 3)) {
                         $displayText = $displayText.Substring(0, $inputWidth - 3) # Ensure it fits
                     }
                     Write-BufferString -X ($promptX + 1) -Y ($inputY + 1) -Text $displayText
@@ -194,10 +170,7 @@ function global:Show-InputDialog {
                     $cancelText = if ($cancelFocused) { "[ Cancel ]" } else { "  Cancel  " }
                     $cancelColor = if ($cancelFocused) { Get-ThemeColor "Warning" } else { Get-ThemeColor "Primary" }
                     Write-BufferString -X ($buttonX + $buttonSpacing) -Y $buttonY -Text $cancelText -ForegroundColor $cancelColor
-                } -Context @{ DialogName = $self.Name; Prompt = $Prompt; CurrentValue = $self.State.InputValue } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Input Dialog Render error for '$($Exception.Context.DialogName)': $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Rendering input dialog" -AdditionalData @{ DialogName = $self.Name; Prompt = $Prompt; CurrentValue = $self.State.InputValue }
             }
             
             HandleInput = {
@@ -216,10 +189,7 @@ function global:Show-InputDialog {
                         Close-TuiDialog
                         Invoke-WithErrorHandling -Component "InputDialog.OnCancel" -ScriptBlock {
                             & $OnCancel
-                        } -Context @{ DialogTitle = $Title } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "Input Dialog OnCancel error: $($Exception.Message)" -Data $Exception.Context
-                        }
+                        } -Context "Input dialog cancelled via Escape" -AdditionalData @{ DialogTitle = $Title }
                         return $true
                     }
                     
@@ -231,10 +201,7 @@ function global:Show-InputDialog {
                                     Close-TuiDialog
                                     Invoke-WithErrorHandling -Component "InputDialog.OnSubmit" -ScriptBlock {
                                         & $OnSubmit -Value $self.State.InputValue
-                                    } -Context @{ DialogTitle = $Title; InputValue = $self.State.InputValue } -ErrorHandler {
-                                        param($Exception)
-                                        Write-Log -Level Error -Message "Input Dialog OnSubmit error: $($Exception.Message)" -Data $Exception.Context
-                                    }
+                                    } -Context "Input dialog submitted via Enter" -AdditionalData @{ DialogTitle = $Title; InputValue = $self.State.InputValue }
                                     return $true
                                 }
                                 ([ConsoleKey]::Backspace) {
@@ -258,10 +225,7 @@ function global:Show-InputDialog {
                                 Close-TuiDialog
                                 Invoke-WithErrorHandling -Component "InputDialog.OnSubmit" -ScriptBlock {
                                     & $OnSubmit -Value $self.State.InputValue
-                                } -Context @{ DialogTitle = $Title; InputValue = $self.State.InputValue } -ErrorHandler {
-                                    param($Exception)
-                                    Write-Log -Level Error -Message "Input Dialog OnSubmit error: $($Exception.Message)" -Data $Exception.Context
-                                }
+                                } -Context "Input dialog submitted via OK button" -AdditionalData @{ DialogTitle = $Title; InputValue = $self.State.InputValue }
                                 return $true
                             }
                         }
@@ -270,30 +234,20 @@ function global:Show-InputDialog {
                                 Close-TuiDialog
                                 Invoke-WithErrorHandling -Component "InputDialog.OnCancel" -ScriptBlock {
                                     & $OnCancel
-                                } -Context @{ DialogTitle = $Title } -ErrorHandler {
-                                    param($Exception)
-                                    Write-Log -Level Error -Message "Input Dialog OnCancel error: $($Exception.Message)" -Data $Exception.Context
-                                }
+                                } -Context "Input dialog cancelled via Cancel button" -AdditionalData @{ DialogTitle = $Title }
                                 return $true
                             }
                         }
                     }
                     
                     return $false
-                } -Context @{ DialogName = $self.Name; Key = $Key; FocusedIndex = $self._focusedIndex } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Input Dialog HandleInput error for '$($Exception.Context.DialogName)': $($Exception.Message)" -Data $Exception.Context
-                    return $false
-                }
+                } -Context "Handling input dialog key press" -AdditionalData @{ DialogName = $self.Name; Key = $Key; FocusedIndex = $self._focusedIndex }
             }
         }
         
         $script:DialogState.CurrentDialog = $inputScreen
         Request-TuiRefresh
-    } -Context @{ Title = $Title; Prompt = $Prompt; DefaultValue = $DefaultValue } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to show input dialog '$($Exception.Context.Title)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Creating input dialog: $Title" -AdditionalData @{ Title = $Title; Prompt = $Prompt; DefaultValue = $DefaultValue }
 }
 
 #endregion
@@ -308,10 +262,7 @@ function global:Initialize-DialogSystem {
             Invoke-WithErrorHandling -Component "DialogSystem.ConfirmEventHandler" -ScriptBlock {
                 $dialogParams = $EventData.Data
                 Show-ConfirmDialog @dialogParams
-            } -Context @{ EventData = $EventData } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "Confirm.Request event handler error: $($Exception.Message)" -Data $Exception.Context
-            }
+            } -Context "Handling Confirm.Request event" -AdditionalData @{ EventData = $EventData }
         }
         
         Subscribe-Event -EventName "Alert.Show" -Handler {
@@ -319,10 +270,7 @@ function global:Initialize-DialogSystem {
             Invoke-WithErrorHandling -Component "DialogSystem.AlertEventHandler" -ScriptBlock {
                 $dialogParams = $EventData.Data
                 Show-AlertDialog @dialogParams
-            } -Context @{ EventData = $EventData } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "Alert.Show event handler error: $($Exception.Message)" -Data $Exception.Context
-            }
+            } -Context "Handling Alert.Show event" -AdditionalData @{ EventData = $EventData }
         }
         
         Subscribe-Event -EventName "Input.Request" -Handler {
@@ -330,17 +278,11 @@ function global:Initialize-DialogSystem {
             Invoke-WithErrorHandling -Component "DialogSystem.InputEventHandler" -ScriptBlock {
                 $dialogParams = $EventData.Data
                 Show-InputDialog @dialogParams
-            } -Context @{ EventData = $EventData } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "Input.Request event handler error: $($Exception.Message)" -Data $Exception.Context
-            }
+            } -Context "Handling Input.Request event" -AdditionalData @{ EventData = $EventData }
         }
         
         Write-Verbose "Dialog System initialized and event handlers registered."
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to initialize Dialog System: $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Initializing Dialog System"
 }
 
 function global:Render-Dialogs {
@@ -352,10 +294,7 @@ function global:Render-Dialogs {
                 & $script:DialogState.CurrentDialog.Render -self $script:DialogState.CurrentDialog
             }
         }
-    } -Context @{ CurrentDialog = $script:DialogState.CurrentDialog.Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Error rendering dialog '$($Exception.Context.CurrentDialog)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Rendering current dialog" -AdditionalData @{ CurrentDialog = $script:DialogState.CurrentDialog.Name }
 }
 
 function global:Handle-DialogInput {
@@ -368,21 +307,14 @@ function global:Handle-DialogInput {
             }
         }
         return $false
-    } -Context @{ CurrentDialog = $script:DialogState.CurrentDialog.Name; Key = $Key } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Error handling dialog input for '$($Exception.Context.CurrentDialog)': $($Exception.Message)" -Data $Exception.Context
-        return $false
-    }
+    } -Context "Handling dialog input" -AdditionalData @{ CurrentDialog = $script:DialogState.CurrentDialog.Name; Key = $Key }
 }
 
 function global:Update-DialogSystem {
     <# .SYNOPSIS Engine Hook: Updates dialog system state. #>
     Invoke-WithErrorHandling -Component "DialogSystem.UpdateDialogSystem" -ScriptBlock {
         # Placeholder for any periodic updates needed
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Error updating dialog system: $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Updating dialog system"
 }
 
 function global:New-TuiDialog {
@@ -439,10 +371,7 @@ function global:New-TuiDialog {
                     Write-BufferString -X $buttonX -Y $buttonY -Text $buttonText -ForegroundColor $color
                     $buttonX += 14
                 }
-            } -Context @{ DialogTitle = $self.Title; DialogMessage = $self.Message } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "Dialog Render error for '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-            }
+            } -Context "Rendering dialog: $($self.Title)" -AdditionalData @{ DialogTitle = $self.Title; DialogMessage = $self.Message }
         }
         
         HandleInput = {
@@ -468,38 +397,25 @@ function global:New-TuiDialog {
                     ([ConsoleKey]::Enter) {
                         Invoke-WithErrorHandling -Component "$($self.Type).OnButtonClick" -ScriptBlock {
                             & $self.OnButtonClick -Button $self.Buttons[$self.SelectedButton] -Index $self.SelectedButton
-                        } -Context @{ DialogTitle = $self.Title; Button = $self.Buttons[$self.SelectedButton]; Index = $self.SelectedButton } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "Dialog OnButtonClick error: $($Exception.Message)" -Data $Exception.Context
-                        }
+                        } -Context "Dialog button clicked: $($self.Buttons[$self.SelectedButton])" -AdditionalData @{ DialogTitle = $self.Title; Button = $self.Buttons[$self.SelectedButton]; Index = $self.SelectedButton }
                         return $true
                     }
                     ([ConsoleKey]::Spacebar) {
                         Invoke-WithErrorHandling -Component "$($self.Type).OnButtonClick" -ScriptBlock {
                             & $self.OnButtonClick -Button $self.Buttons[$self.SelectedButton] -Index $self.SelectedButton
-                        } -Context @{ DialogTitle = $self.Title; Button = $self.Buttons[$self.SelectedButton]; Index = $self.SelectedButton } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "Dialog OnButtonClick error: $($Exception.Message)" -Data $Exception.Context
-                        }
+                        } -Context "Dialog button activated: $($self.Buttons[$self.SelectedButton])" -AdditionalData @{ DialogTitle = $self.Title; Button = $self.Buttons[$self.SelectedButton]; Index = $self.SelectedButton }
                         return $true
                     }
                     ([ConsoleKey]::Escape) {
                         Invoke-WithErrorHandling -Component "$($self.Type).OnCancel" -ScriptBlock {
                             & $self.OnCancel
-                        } -Context @{ DialogTitle = $self.Title } -ErrorHandler {
-                            param($Exception)
-                            Write-Log -Level Error -Message "Dialog OnCancel error: $($Exception.Message)" -Data $Exception.Context
-                        }
+                        } -Context "Dialog cancelled via Escape" -AdditionalData @{ DialogTitle = $self.Title }
                         return $true
                     }
                 }
                 
                 return $false
-            } -Context @{ DialogTitle = $self.Title; Key = $Key; SelectedButton = $self.SelectedButton } -ErrorHandler {
-                param($Exception)
-                Write-Log -Level Error -Message "Dialog HandleInput error for '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-                return $false
-            }
+            } -Context "Handling dialog input" -AdditionalData @{ DialogTitle = $self.Title; Key = $Key; SelectedButton = $self.SelectedButton }
         }
     }
     
@@ -567,10 +483,7 @@ function global:Show-ProgressDialog {
                         Write-BufferString -X $buttonX -Y $buttonY -Text $buttonText `
                             -ForegroundColor (Get-ThemeColor "Warning")
                     }
-                } -Context @{ DialogTitle = $self.Title; Percent = $self.PercentComplete } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Progress Dialog Render error for '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Rendering progress dialog" -AdditionalData @{ DialogTitle = $self.Title; Percent = $self.PercentComplete }
             }
             
             HandleInput = {
@@ -587,11 +500,7 @@ function global:Show-ProgressDialog {
                     }
                     
                     return $false
-                } -Context @{ DialogTitle = $self.Title; Key = $Key } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Progress Dialog HandleInput error for '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-                    return $false
-                }
+                } -Context "Handling progress dialog input" -AdditionalData @{ DialogTitle = $self.Title; Key = $Key }
             }
             
             UpdateProgress = {
@@ -600,21 +509,14 @@ function global:Show-ProgressDialog {
                     $self.PercentComplete = [Math]::Min(100, [Math]::Max(0, $PercentComplete))
                     if ($Message) { $self.Message = $Message }
                     Request-TuiRefresh
-                } -Context @{ DialogTitle = $self.Title; NewPercent = $PercentComplete; NewMessage = $Message } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "Progress Dialog UpdateProgress error for '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Updating progress dialog" -AdditionalData @{ DialogTitle = $self.Title; NewPercent = $PercentComplete; NewMessage = $Message }
             }
         }
         
         $script:DialogState.CurrentDialog = $dialog
         Request-TuiRefresh
         return $dialog
-    } -Context @{ Title = $Title; Message = $Message; Percent = $PercentComplete } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to show progress dialog '$($Exception.Context.Title)': $($Exception.Message)" -Data $Exception.Context
-        return $null # Return null on error
-    }
+    } -Context "Creating progress dialog: $Title" -AdditionalData @{ Title = $Title; Message = $Message; Percent = $PercentComplete }
 }
 
 function global:Show-ListDialog {
@@ -713,10 +615,7 @@ function global:Show-ListDialog {
                         Write-BufferString -X ($startX + $buttonSpacing) -Y $buttonY -Text $cancelText `
                             -ForegroundColor (Get-ThemeColor "Primary")
                     }
-                } -Context @{ DialogTitle = $self.Title; Prompt = $self.Prompt; SelectedIndex = $self.SelectedIndex } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "List Dialog Render error for '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-                }
+                } -Context "Rendering list dialog" -AdditionalData @{ DialogTitle = $self.Title; Prompt = $self.Prompt; SelectedIndex = $self.SelectedIndex }
             }
             
             HandleInput = {
@@ -750,17 +649,11 @@ function global:Show-ListDialog {
                                 $selectedValues = $self.SelectedItems | ForEach-Object { $self.Items[$_] }
                                 Invoke-WithErrorHandling -Component "ListDialog.OnSelect" -ScriptBlock {
                                     & $OnSelect -Selected $selectedValues
-                                } -Context @{ DialogTitle = $self.Title; SelectedValues = $selectedValues } -ErrorHandler {
-                                    param($Exception)
-                                    Write-Log -Level Error -Message "List Dialog OnSelect error: $($Exception.Message)" -Data $Exception.Context
-                                }
+                                } -Context "List dialog multi-select completed" -AdditionalData @{ DialogTitle = $self.Title; SelectedValues = $selectedValues }
                             } else {
                                 Invoke-WithErrorHandling -Component "ListDialog.OnSelect" -ScriptBlock {
                                     & $OnSelect -Selected $self.Items[$self.SelectedIndex]
-                                } -Context @{ DialogTitle = $self.Title; SelectedValue = $self.Items[$self.SelectedIndex] } -ErrorHandler {
-                                    param($Exception)
-                                    Write-Log -Level Error -Message "List Dialog OnSelect error: $($Exception.Message)" -Data $Exception.Context
-                                }
+                                } -Context "List dialog selection completed" -AdditionalData @{ DialogTitle = $self.Title; SelectedValue = $self.Items[$self.SelectedIndex] }
                             }
                             return $true
                         }
@@ -768,29 +661,19 @@ function global:Show-ListDialog {
                             Close-TuiDialog
                             Invoke-WithErrorHandling -Component "ListDialog.OnCancel" -ScriptBlock {
                                 & $OnCancel
-                            } -Context @{ DialogTitle = $self.Title } -ErrorHandler {
-                                param($Exception)
-                                Write-Log -Level Error -Message "List Dialog OnCancel error: $($Exception.Message)" -Data $Exception.Context
-                            }
+                            } -Context "List dialog cancelled" -AdditionalData @{ DialogTitle = $self.Title }
                             return $true
                         }
                     }
                     
                     return $false
-                } -Context @{ DialogTitle = $self.Title; Key = $Key; SelectedIndex = $self.SelectedIndex } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "List Dialog HandleInput error for '$($Exception.Context.DialogTitle)': $($Exception.Message)" -Data $Exception.Context
-                    return $false
-                }
+                } -Context "Handling list dialog input" -AdditionalData @{ DialogTitle = $self.Title; Key = $Key; SelectedIndex = $self.SelectedIndex }
             }
         }
         
         $script:DialogState.CurrentDialog = $dialog
         Request-TuiRefresh
-    } -Context @{ Title = $Title; Prompt = $Prompt; ItemsCount = $Items.Count } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to show list dialog '$($Exception.Context.Title)': $($Exception.Message)" -Data $Exception.Context
-    }
+    } -Context "Creating list dialog: $Title" -AdditionalData @{ Title = $Title; Prompt = $Prompt; ItemsCount = $Items.Count }
 }
 
 #endregion

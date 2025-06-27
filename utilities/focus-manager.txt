@@ -15,7 +15,7 @@ function global:Request-Focus {
         [bool]$UpdateTabOrder = $false,
         [string]$Reason = "Direct"
     )
-    Invoke-WithErrorHandling -Component "FocusManager.RequestFocus" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.RequestFocus" -Context "Requesting focus for component" -AdditionalData @{ ComponentName = $Component.Name; Reason = $Reason } -ScriptBlock {
         # Validate component
         if ($Component -and -not $Component.IsFocusable) {
             Write-Log -Level Debug -Message "Cannot focus non-focusable component: $($Component.Name ?? $Component.Type)"
@@ -123,19 +123,12 @@ function global:Request-Focus {
         }
         
         return $true
-    } -Context @{ Component = $Component.Name; Reason = $Reason } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager RequestFocus error for '$($Exception.Context.Component)': $($Exception.Message)" -Data $Exception.Context
-        return $false
     }
 }
 
 function global:Clear-Focus {
-    Invoke-WithErrorHandling -Component "FocusManager.ClearFocus" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.ClearFocus" -Context "Clearing focus" -ScriptBlock {
         Request-Focus -Component $null -Reason "Clear"
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager ClearFocus error: $($Exception.Message)" -Data $Exception.Context
     }
 }
 
@@ -144,7 +137,7 @@ function global:Move-Focus {
         [bool]$Reverse = $false,
         [bool]$Wrap = $true
     )
-    Invoke-WithErrorHandling -Component "FocusManager.MoveFocus" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.MoveFocus" -Context "Moving focus" -AdditionalData @{ Reverse = $Reverse; Wrap = $Wrap; CurrentFocused = $script:Focus.FocusedComponent.Name } -ScriptBlock {
         # Check if active scope handles its own focus movement
         if ($script:Focus.ActiveScope -and $script:Focus.ActiveScope.HandleScopedFocus) {
             try {
@@ -215,37 +208,25 @@ function global:Move-Focus {
         
         Write-Log -Level Debug -Message "No valid focus target found"
         return $false
-    } -Context @{ Reverse = $Reverse; Wrap = $Wrap; CurrentFocused = $script:Focus.FocusedComponent.Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager MoveFocus error: $($Exception.Message)" -Data $Exception.Context
-        return $false
     }
 }
 
 function global:Get-FocusedComponent {
-    Invoke-WithErrorHandling -Component "FocusManager.GetFocusedComponent" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.GetFocusedComponent" -Context "Getting focused component" -ScriptBlock {
         return $script:Focus.FocusedComponent
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager GetFocusedComponent error: $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 
 function global:Get-FocusHistory {
-    Invoke-WithErrorHandling -Component "FocusManager.GetFocusHistory" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.GetFocusHistory" -Context "Getting focus history" -ScriptBlock {
         return $script:Focus.History
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager GetFocusHistory error: $($Exception.Message)" -Data $Exception.Context
-        return @()
     }
 }
 
 # --- FIX: REMOVED 'private:' ---
 function Get-FocusScope {
     param($Component)
-    Invoke-WithErrorHandling -Component "FocusManager.GetFocusScope" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.GetFocusScope" -Context "Getting focus scope" -AdditionalData @{ ComponentName = $Component.Name } -ScriptBlock {
         $current = $Component
         while ($current) {
             if ($current.IsFocusScope) {
@@ -255,16 +236,12 @@ function Get-FocusScope {
         }
         
         return $null
-    } -Context @{ Component = $Component.Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager GetFocusScope error for '$($Exception.Context.Component)': $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 
 function global:Push-FocusScope {
     param([hashtable]$Scope)
-    Invoke-WithErrorHandling -Component "FocusManager.PushFocusScope" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.PushFocusScope" -Context "Pushing focus scope" -AdditionalData @{ ScopeName = $Scope.Name } -ScriptBlock {
         if (-not $Scope.IsFocusScope) {
             $Scope.IsFocusScope = $true
         }
@@ -273,14 +250,11 @@ function global:Push-FocusScope {
         $script:Focus.ActiveScope = $Scope
         
         Write-Log -Level Debug -Message "Pushed focus scope: $($Scope.Name ?? $Scope.Type)"
-    } -Context @{ Scope = $Scope.Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager PushFocusScope error for '$($Exception.Context.Scope)': $($Exception.Message)" -Data $Exception.Context
     }
 }
 
 function global:Pop-FocusScope {
-    Invoke-WithErrorHandling -Component "FocusManager.PopFocusScope" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.PopFocusScope" -Context "Popping focus scope" -ScriptBlock {
         if ($script:Focus.ScopeStack.Count -eq 0) {
             return $null
         }
@@ -298,17 +272,13 @@ function global:Pop-FocusScope {
         Write-Log -Level Debug -Message "Popped focus scope: $($poppedScope.Name ?? $poppedScope.Type)"
         
         return $poppedScope
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager PopFocusScope error: $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 
 # --- FIX: REMOVED 'private:' ---
 function Update-TabOrder {
     param($FocusedComponent)
-    Invoke-WithErrorHandling -Component "FocusManager.UpdateTabOrder" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.UpdateTabOrder" -Context "Updating tab order" -AdditionalData @{ FocusedComponentName = $FocusedComponent.Name } -ScriptBlock {
         # If component is already in tab order, no need to update
         if ($FocusedComponent -in $script:Focus.TabOrder) {
             return
@@ -316,16 +286,13 @@ function Update-TabOrder {
         
         # Rebuild tab order
         Register-ScreenForFocus -Screen $global:TuiState.CurrentScreen
-    } -Context @{ FocusedComponent = $FocusedComponent.Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager UpdateTabOrder error: $($Exception.Message)" -Data $Exception.Context
     }
 }
 
 # --- FIX: REMOVED 'private:' ---
 function Register-ScreenForFocus {
     param($Screen)
-    Invoke-WithErrorHandling -Component "FocusManager.RegisterScreenForFocus" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.RegisterScreenForFocus" -Context "Registering screen for focus" -AdditionalData @{ ScreenName = $Screen.Name } -ScriptBlock {
         $script:Focus.TabOrder = @()
         $script:Focus.ActiveScope = $null
         
@@ -398,29 +365,23 @@ function Register-ScreenForFocus {
         } elseif ($script:Focus.TabOrder.Count -eq 0) {
             Request-Focus -Component $null -Reason "NoFocusableComponents"
         }
-    } -Context @{ ScreenName = $Screen.Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager RegisterScreenForFocus error for '$($Exception.Context.ScreenName)': $($Exception.Message)" -Data $Exception.Context
     }
 }
 
 function global:Initialize-FocusManager {
-    Invoke-WithErrorHandling -Component "FocusManager.Initialize" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.Initialize" -Context "Initializing focus manager" -ScriptBlock {
         # Subscribe to screen events
         if (Get-Command -Name "Subscribe-Event" -ErrorAction SilentlyContinue) {
             Subscribe-Event -EventName "Screen.Pushed" -Handler {
                 param($Event)
-                Invoke-WithErrorHandling -Component "FocusManager.ScreenPushedHandler" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "FocusManager.ScreenPushedHandler" -Context "Handling screen pushed event" -AdditionalData @{ EventData = $Event.Data } -ScriptBlock {
                     Register-ScreenForFocus -Screen $Event.Data.Screen
-                } -Context @{ EventData = $Event.Data } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "FocusManager Screen.Pushed event handler error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             Subscribe-Event -EventName "Screen.Popped" -Handler {
                 param($Event)
-                Invoke-WithErrorHandling -Component "FocusManager.ScreenPoppedHandler" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "FocusManager.ScreenPoppedHandler" -Context "Handling screen popped event" -AdditionalData @{ EventData = $Event.Data } -ScriptBlock {
                     # Clear focus scopes
                     $script:Focus.ScopeStack = @()
                     $script:Focus.ActiveScope = $null
@@ -429,15 +390,12 @@ function global:Initialize-FocusManager {
                     if ($global:TuiState -and $global:TuiState.CurrentScreen) {
                         Register-ScreenForFocus -Screen $global:TuiState.CurrentScreen
                     }
-                } -Context @{ EventData = $Event.Data } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "FocusManager Screen.Popped event handler error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             Subscribe-Event -EventName "Component.VisibilityChanged" -Handler {
                 param($Event)
-                Invoke-WithErrorHandling -Component "FocusManager.ComponentVisibilityChangedHandler" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "FocusManager.ComponentVisibilityChangedHandler" -Context "Handling component visibility changed event" -AdditionalData @{ EventData = $Event.Data } -ScriptBlock {
                     $component = $Event.Data.Component
                     
                     # If hiding focused component, move focus
@@ -449,17 +407,11 @@ function global:Initialize-FocusManager {
                     if ($global:TuiState -and $global:TuiState.CurrentScreen) {
                         Register-ScreenForFocus -Screen $global:TuiState.CurrentScreen
                     }
-                } -Context @{ EventData = $Event.Data } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "FocusManager Component.VisibilityChanged event handler error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
         }
         
         Write-Log -Level Info -Message "Focus Manager initialized"
-    } -Context @{} -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to initialize Focus Manager: $($Exception.Message)" -Data $Exception.Context
     }
 }
 
@@ -469,7 +421,7 @@ function global:Set-ComponentFocusable {
         [hashtable]$Component,
         [bool]$IsFocusable
     )
-    Invoke-WithErrorHandling -Component "FocusManager.SetComponentFocusable" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.SetComponentFocusable" -Context "Setting component focusable" -AdditionalData @{ ComponentName = $Component.Name; IsFocusable = $IsFocusable } -ScriptBlock {
         $wasFocusable = $Component.IsFocusable
         $Component.IsFocusable = $IsFocusable
         
@@ -482,15 +434,12 @@ function global:Set-ComponentFocusable {
         if ($global:TuiState -and $global:TuiState.CurrentScreen) {
             Register-ScreenForFocus -Screen $global:TuiState.CurrentScreen
         }
-    } -Context @{ Component = $Component.Name; IsFocusable = $IsFocusable } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager SetComponentFocusable error for '$($Exception.Context.Component)': $($Exception.Message)" -Data $Exception.Context
     }
 }
 
 function global:Focus-NextInScope {
     param([hashtable]$Scope)
-    Invoke-WithErrorHandling -Component "FocusManager.FocusNextInScope" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "FocusManager.FocusNextInScope" -Context "Focusing next in scope" -AdditionalData @{ ScopeName = $Scope.Name } -ScriptBlock {
         if (-not $Scope -or -not $Scope.IsFocusScope) {
             return $false
         }
@@ -524,10 +473,6 @@ function global:Focus-NextInScope {
         
         Request-Focus -Component $scopeFocusable[$nextIndex] -Reason "ScopeNavigation"
         return $true
-    } -Context @{ Scope = $Scope.Name } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "FocusManager FocusNextInScope error for '$($Exception.Context.Scope)': $($Exception.Message)" -Data $Exception.Context
-        return $false
     }
 }
 

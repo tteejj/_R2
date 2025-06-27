@@ -2,9 +2,6 @@
 # Factory pattern implementation for creating screen instances
 # AI: Implements Phase 4.1 of the class migration plan - Screen Factory
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
 # Import base classes
 using module '..\components\ui-classes.psm1'
 
@@ -12,6 +9,11 @@ using module '..\components\ui-classes.psm1'
 using module '..\screens\dashboard\dashboard-screen-class.psm1'
 using module '..\screens\task-list-screen-class.psm1'
 using module '..\screens\new-task-screen-class.psm1'
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+
 
 # Import utilities for error handling
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force

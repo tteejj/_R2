@@ -18,7 +18,7 @@ function Initialize-TaskService {
     [PSCustomObject] The initialized Task Service instance
     #>
     
-    Invoke-WithErrorHandling -Component "TaskService.Initialize" -Context @{} -ScriptBlock {
+    Invoke-WithErrorHandling -Component "TaskService.Initialize" -Context "Initializing Task Service" -ScriptBlock {
         Write-Log -Level Info -Message "Initializing Task Service"
         
         # Create the service object
@@ -38,7 +38,7 @@ function Initialize-TaskService {
                 [hashtable]$taskData
             )
             
-            Invoke-WithErrorHandling -Component "TaskService.AddTask" -Context @{ TaskData = $taskData } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.AddTask" -Context "Adding new task" -ScriptBlock {
                 # Defensive validation
                 if (-not $taskData) {
                     Write-Log -Level Warning -Message "AddTask: No task data provided"
@@ -105,7 +105,7 @@ function Initialize-TaskService {
                 [hashtable]$updates
             )
             
-            Invoke-WithErrorHandling -Component "TaskService.UpdateTask" -Context @{ TaskId = $taskId; Updates = $updates } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.UpdateTask" -Context "Updating task" -ScriptBlock {
                 # Defensive validation
                 if (-not $taskId) {
                     Write-Log -Level Warning -Message "UpdateTask: No TaskId provided"
@@ -198,7 +198,7 @@ function Initialize-TaskService {
                 [string]$taskId
             )
             
-            Invoke-WithErrorHandling -Component "TaskService.DeleteTask" -Context @{ TaskId = $taskId } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.DeleteTask" -Context "Deleting task" -ScriptBlock {
                 # Defensive validation
                 if (-not $taskId) {
                     Write-Log -Level Warning -Message "DeleteTask: No TaskId provided"
@@ -259,7 +259,7 @@ function Initialize-TaskService {
                 [switch]$ActiveOnly
             )
             
-            Invoke-WithErrorHandling -Component "TaskService.GetTasks" -Context @{ ActiveOnly = $ActiveOnly } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.GetTasks" -Context "Getting tasks" -ScriptBlock {
                 Write-Log -Level Debug -Message "Getting tasks (ActiveOnly: $ActiveOnly)"
                 
                 $tasks = @($this._tasks)
@@ -282,7 +282,7 @@ function Initialize-TaskService {
                 [string]$taskId
             )
             
-            Invoke-WithErrorHandling -Component "TaskService.GetTaskById" -Context @{ TaskId = $taskId } -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.GetTaskById" -Context "Getting task by ID" -ScriptBlock {
                 if (-not $taskId) {
                     Write-Log -Level Warning -Message "GetTaskById: No TaskId provided"
                     return $null
@@ -301,7 +301,7 @@ function Initialize-TaskService {
         
         # GetTasksForDisplay method (formatted for UI tables)
         Add-Member -InputObject $service -MemberType ScriptMethod -Name "GetTasksForDisplay" -Value {
-            Invoke-WithErrorHandling -Component "TaskService.GetTasksForDisplay" -Context @{} -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.GetTasksForDisplay" -Context "Getting tasks for display" -ScriptBlock {
                 Write-Log -Level Debug -Message "Getting tasks for display"
                 
                 $tasksForTable = @()
@@ -338,7 +338,7 @@ function Initialize-TaskService {
         
         # GetStatistics method
         Add-Member -InputObject $service -MemberType ScriptMethod -Name "GetStatistics" -Value {
-            Invoke-WithErrorHandling -Component "TaskService.GetStatistics" -Context @{} -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.GetStatistics" -Context "Calculating task statistics" -ScriptBlock {
                 Write-Log -Level Debug -Message "Calculating task statistics"
                 
                 $stats = @{
@@ -383,7 +383,7 @@ function Initialize-TaskService {
         
         # Initialize method - loads tasks from global data
         Add-Member -InputObject $service -MemberType ScriptMethod -Name "Initialize" -Value {
-            Invoke-WithErrorHandling -Component "TaskService.Initialize" -Context @{} -ScriptBlock {
+            Invoke-WithErrorHandling -Component "TaskService.Initialize" -Context "Loading task data" -ScriptBlock {
                 if ($this._isInitialized) {
                     Write-Log -Level Debug -Message "TaskService already initialized"
                     return

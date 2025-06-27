@@ -2,11 +2,13 @@
 # Implements navigation menu functionality with keyboard shortcuts
 # AI: Implements Phase 2.2 of the class migration plan - Navigation Component
 
+# Import base classes
+using module '.\ui-classes.psm1'
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Import base classes
-using module '.\ui-classes.psm1'
+
 
 # Import utilities for error handling
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force

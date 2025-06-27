@@ -2,11 +2,13 @@
 # Implements table display functionality with column formatting and selection
 # AI: Implements Phase 2.1 of the class migration plan - Table Component
 
+# Import base classes
+using module '.\ui-classes.psm1'
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Import base classes
-using module '.\ui-classes.psm1'
+
 
 # Import utilities for error handling
 Import-Module -Name "$PSScriptRoot\..\utilities\error-handling.psm1" -Force

@@ -1,43 +1,3 @@
-@{
-    # Module manifest for keybindings service
-    RootModule = 'keybindings.psm1'
-    ModuleVersion = '1.0.0'
-    GUID = 'c3d4e5f6-7a8b-9c0d-1e2f-3a4b5c6d7e8f'
-    Author = 'PMC Terminal Team'
-    CompanyName = 'PMC Terminal'
-    Copyright = '(c) 2025 PMC Terminal. All rights reserved.'
-    Description = 'Centralized keybinding management service with context support for PMC Terminal'
-    
-    # Minimum PowerShell version
-    PowerShellVersion = '5.1'
-    
-    # Functions to export
-    FunctionsToExport = @('Initialize-KeybindingService')
-    
-    # Variables to export
-    VariablesToExport = @()
-    
-    # Aliases to export
-    AliasesToExport = @()
-    
-    # Cmdlets to export
-    CmdletsToExport = @()
-    
-    # Required modules
-    RequiredModules = @()
-    
-    # Module dependencies that must be loaded
-    NestedModules = @()
-    
-    # Private data
-    PrivateData = @{
-        PSData = @{
-            Tags = @('Keybindings', 'Input', 'TUI', 'PMC')
-            ProjectUri = 'https://github.com/pmc-terminal/pmc-terminal'
-            ReleaseNotes = 'Initial release of keybinding service with context-aware bindings and chord support'
-        }
-    }
-}
 # FILE: services/keybindings.psm1
 # PURPOSE: Centralizes keybinding logic to make them configurable and declarative.
 
@@ -46,7 +6,7 @@ function Initialize-KeybindingService {
         [hashtable]$CustomBindings = @{},
         [bool]$EnableChords = $false  # For future multi-key sequences
     )
-    Invoke-WithErrorHandling -Component "KeybindingService.Initialize" -ScriptBlock {
+    Invoke-WithErrorHandling -Component "KeybindingService.Initialize" -Context "Keybinding service initialization" -ScriptBlock {
         # Default keybindings - can be overridden
         $defaultKeyMap = @{
             # Application-level
@@ -120,7 +80,7 @@ function Initialize-KeybindingService {
                     [System.ConsoleKeyInfo]$KeyInfo,
                     [string]$Context = $null
                 )
-                Invoke-WithErrorHandling -Component "KeybindingService.IsAction" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.IsAction" -Context "Check if key matches action" -ScriptBlock {
                     if ([string]::IsNullOrWhiteSpace($ActionName)) { return $false }
                     
                     # Check context-specific binding first
@@ -133,16 +93,12 @@ function Initialize-KeybindingService {
                     if (-not $self._keyMap.ContainsKey($ActionName)) { return $false }
                     
                     return (& $self._matchesBinding -self $self -binding $self._keyMap[$ActionName] -keyInfo $KeyInfo)
-                } -Context @{ ActionName = $ActionName; KeyInfo = $KeyInfo; Context = $Context } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService IsAction error: $($Exception.Message)" -Data $Exception.Context
-                    return $false
                 }
             }
             
             _matchesBinding = {
                 param($self, $binding, $keyInfo)
-                Invoke-WithErrorHandling -Component "KeybindingService._matchesBinding" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService._matchesBinding" -Context "Check if key matches binding" -ScriptBlock {
                     # Match key
                     $keyMatches = $false
                     if ($binding.Key -is [System.ConsoleKey]) {
@@ -167,75 +123,54 @@ function Initialize-KeybindingService {
                     return ($hasCtrl -eq $ctrlRequired) -and 
                            ($hasAlt -eq $altRequired) -and 
                            ($hasShift -eq $shiftRequired)
-                } -Context @{ Binding = $binding; KeyInfo = $KeyInfo } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService _matchesBinding error: $($Exception.Message)" -Data $Exception.Context
-                    return $false
                 }
             }
             
             GetBinding = {
                 param($self, [string]$ActionName)
-                Invoke-WithErrorHandling -Component "KeybindingService.GetBinding" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.GetBinding" -Context "Get keybinding for action" -ScriptBlock {
                     return $self._keyMap[$ActionName]
-                } -Context @{ ActionName = $ActionName } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService GetBinding error: $($Exception.Message)" -Data $Exception.Context
-                    return $null
                 }
             }
             
             SetBinding = {
                 param($self, [string]$ActionName, $Key, [string[]]$Modifiers = @())
-                Invoke-WithErrorHandling -Component "KeybindingService.SetBinding" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.SetBinding" -Context "Set keybinding for action" -ScriptBlock {
                     $self._keyMap[$ActionName] = @{ Key = $Key; Modifiers = $Modifiers }
                     Write-Log -Level Debug -Message "Set keybinding for '$ActionName': $Key + $($Modifiers -join '+')"
-                } -Context @{ ActionName = $ActionName; Key = $Key; Modifiers = $Modifiers } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService SetBinding error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             RemoveBinding = {
                 param($self, [string]$ActionName)
-                Invoke-WithErrorHandling -Component "KeybindingService.RemoveBinding" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.RemoveBinding" -Context "Remove keybinding for action" -ScriptBlock {
                     $self._keyMap.Remove($ActionName)
                     Write-Log -Level Debug -Message "Removed keybinding for '$ActionName'"
-                } -Context @{ ActionName = $ActionName } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService RemoveBinding error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             GetBindingDescription = {
                 param($self, [string]$ActionName)
-                Invoke-WithErrorHandling -Component "KeybindingService.GetBindingDescription" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.GetBindingDescription" -Context "Get binding description for action" -ScriptBlock {
                     if (-not $self._keyMap.ContainsKey($ActionName)) { return $null }
                     $binding = $self._keyMap[$ActionName]
                     $keyStr = if ($binding.Key -is [System.ConsoleKey]) { $binding.Key.ToString() } else { $binding.Key.ToString().ToUpper() }
                     if ($binding.Modifiers.Count -gt 0) { return "$($binding.Modifiers -join '+') + $keyStr" }
                     return $keyStr
-                } -Context @{ ActionName = $ActionName } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService GetBindingDescription error: $($Exception.Message)" -Data $Exception.Context
-                    return $null
                 }
             }
             
             RegisterGlobalHandler = {
                 param($self, [string]$ActionName, [scriptblock]$Handler)
-                Invoke-WithErrorHandling -Component "KeybindingService.RegisterGlobalHandler" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.RegisterGlobalHandler" -Context "Register global key handler" -ScriptBlock {
                     $self._globalHandlers[$ActionName] = $Handler
                     Write-Log -Level Debug -Message "Registered global handler for '$ActionName'"
-                } -Context @{ ActionName = $ActionName } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService RegisterGlobalHandler error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             HandleKey = {
                 param($self, [System.ConsoleKeyInfo]$KeyInfo, [string]$Context = $null)
-                Invoke-WithErrorHandling -Component "KeybindingService.HandleKey" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.HandleKey" -Context "Handle key input" -ScriptBlock {
                     foreach ($action in $self._keyMap.Keys) {
                         if ((& $self.IsAction -self $self -ActionName $action -KeyInfo $KeyInfo -Context $Context)) {
                             if ($self._globalHandlers.ContainsKey($action)) {
@@ -246,27 +181,20 @@ function Initialize-KeybindingService {
                         }
                     }
                     return $null
-                } -Context @{ KeyInfo = $KeyInfo; Context = $Context } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService HandleKey error: $($Exception.Message)" -Data $Exception.Context
-                    return $null
                 }
             }
             
             PushContext = {
                 param($self, [string]$Context)
-                Invoke-WithErrorHandling -Component "KeybindingService.PushContext" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.PushContext" -Context "Push keybinding context" -ScriptBlock {
                     $self._contextStack += $Context
                     Write-Log -Level Debug -Message "Pushed keybinding context: $Context"
-                } -Context @{ Context = $Context } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService PushContext error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             PopContext = {
                 param($self)
-                Invoke-WithErrorHandling -Component "KeybindingService.PopContext" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.PopContext" -Context "Pop keybinding context" -ScriptBlock {
                     if ($self._contextStack.Count -gt 0) {
                         $context = $self._contextStack[-1]
                         $self._contextStack = $self._contextStack[0..($self._contextStack.Count - 2)]
@@ -274,28 +202,20 @@ function Initialize-KeybindingService {
                         return $context
                     }
                     return $null
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService PopContext error: $($Exception.Message)" -Data $Exception.Context
-                    return $null
                 }
             }
             
             GetCurrentContext = {
                 param($self)
-                Invoke-WithErrorHandling -Component "KeybindingService.GetCurrentContext" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.GetCurrentContext" -Context "Get current keybinding context" -ScriptBlock {
                     if ($self._contextStack.Count -gt 0) { return $self._contextStack[-1] }
-                    return $null
-                } -Context @{} -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService GetCurrentContext error: $($Exception.Message)" -Data $Exception.Context
                     return $null
                 }
             }
             
             GetAllBindings = {
                 param($self, [bool]$GroupByCategory = $false)
-                Invoke-WithErrorHandling -Component "KeybindingService.GetAllBindings" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.GetAllBindings" -Context "Get all keybindings" -ScriptBlock {
                     if (-not $GroupByCategory) { return $self._keyMap }
                     $grouped = @{}
                     foreach ($action in $self._keyMap.Keys) {
@@ -305,27 +225,20 @@ function Initialize-KeybindingService {
                         $grouped[$category][$action] = $self._keyMap[$action]
                     }
                     return $grouped
-                } -Context @{ GroupByCategory = $GroupByCategory } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService GetAllBindings error: $($Exception.Message)" -Data $Exception.Context
-                    return @{}
                 }
             }
             
             ExportBindings = {
                 param($self, [string]$Path)
-                Invoke-WithErrorHandling -Component "KeybindingService.ExportBindings" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.ExportBindings" -Context "Export keybindings to file" -ScriptBlock {
                     $self._keyMap | ConvertTo-Json -Depth 3 | Out-File -FilePath $Path
                     Write-Log -Level Info -Message "Exported keybindings to: $Path"
-                } -Context @{ FilePath = $Path } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService ExportBindings error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
             
             ImportBindings = {
                 param($self, [string]$Path)
-                Invoke-WithErrorHandling -Component "KeybindingService.ImportBindings" -ScriptBlock {
+                Invoke-WithErrorHandling -Component "KeybindingService.ImportBindings" -Context "Import keybindings from file" -ScriptBlock {
                     if (Test-Path $Path) {
                         $imported = Get-Content $Path | ConvertFrom-Json
                         foreach ($prop in $imported.PSObject.Properties) {
@@ -336,18 +249,11 @@ function Initialize-KeybindingService {
                         }
                         Write-Log -Level Info -Message "Imported keybindings from: $Path"
                     }
-                } -Context @{ FilePath = $Path } -ErrorHandler {
-                    param($Exception)
-                    Write-Log -Level Error -Message "KeybindingService ImportBindings error: $($Exception.Message)" -Data $Exception.Context
                 }
             }
         }
         
         return $service
-    } -Context @{ CustomBindings = $CustomBindings; EnableChords = $EnableChords } -ErrorHandler {
-        param($Exception)
-        Write-Log -Level Error -Message "Failed to initialize Keybinding Service: $($Exception.Message)" -Data $Exception.Context
-        return $null
     }
 }
 
